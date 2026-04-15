@@ -1,0 +1,51 @@
+/* Dégradé de fond */
+.bg-detail-gradient {
+    background: linear-gradient(135deg, #f8f9fc 0%, #e2e8f0 100%);
+}
+
+/* Cartes de sélection latérale */
+.selection-card {
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border: 1px solid rgba(0,0,0,0.05) !important;
+}
+
+.selection-card:hover {
+    transform: translateX(8px);
+    background-color: #ffffff;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1) !important;
+}
+
+.active-selection {
+    border-left: 5px solid #4e73df !important;
+    background-color: #fff !important;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Badges de sévérité */
+.bg-warning-light { background-color: #fffbe6; }
+.text-warning { color: #faad14 !important; }
+.bg-success-light { background-color: #f6ffed; }
+.text-success { color: #52c41a !important; }
+
+/* Timeline simple */
+.timeline-sm {
+    max-height: 250px;
+    overflow-y: auto;
+    padding-right: 5px;
+}
+
+/* Scrollbar personnalisée pour le journal */
+.timeline-sm::-webkit-scrollbar {
+    width: 4px;
+}
+.timeline-sm::-webkit-scrollbar-thumb {
+    background: #e2e8f0;
+    border-radius: 10px;
+}
+
+/* Header boutons */
+.btn-white {
+    background: white;
+    color: #4a5568;
+}

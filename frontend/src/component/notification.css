@@ -1,0 +1,98 @@
+/* Fond de la page avec un léger dégradé pour faire ressortir la carte blanche */
+.bg-notif-gradient {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Conteneur principal de la page */
+.container.bg-white {
+    max-width: 900px; /* Largeur optimale pour la lecture sur PC */
+    min-height: 85vh;
+    border: 1px solid rgba(0,0,0,0.05);
+}
+
+/* Style des cartes de notification */
+.card {
+    transition: all 0.3s ease;
+    border: 1px solid #f0f0f0 !important;
+    background-color: #ffffff;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    shadow: 0 10px 20px rgba(0,0,0,0.05);
+    border-color: #e0e0e0 !important;
+}
+
+/* La boîte d'icône (le carré de couleur à gauche) */
+.notif-icon-box {
+    width: 60px;
+    height: 60px;
+    border: 2px dashed rgba(0,0,0,0.1) !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s ease;
+}
+
+.card:hover .notif-icon-box {
+    transform: scale(1.05);
+}
+
+/* Point de notification "Non lu" */
+.unread-dot {
+    width: 10px;
+    height: 10px;
+    background-color: #ff4d4f; /* Rouge vif */
+    border-radius: 50%;
+    box-shadow: 0 0 0 3px rgba(255, 77, 79, 0.2);
+}
+
+/* Typographie */
+.notif-text {
+    font-size: 0.95rem;
+    color: #6c757d;
+    max-width: 85%; /* Évite que le texte ne s'étale trop sur PC */
+}
+
+h5 {
+    color: #2d3436;
+    font-size: 1.1rem;
+}
+
+/* Actions (liens cliquables en bas) */
+.btn-link {
+    text-decoration: none;
+    transition: opacity 0.2s;
+    font-size: 0.85rem;
+    color: #4e73df !important; /* Bleu pro */
+}
+
+.btn-link:hover {
+    text-decoration: underline;
+    opacity: 0.8;
+}
+
+/* Bouton Paramètres (en haut à droite) */
+.bg-light-purple {
+    background-color: #f3f0ff;
+}
+.text-purple {
+    color: #6741d9;
+}
+
+/* Personnalisation de la barre de défilement si la liste est longue */
+.container::-webkit-scrollbar {
+    width: 6px;
+}
+.container::-webkit-scrollbar-thumb {
+    background-color: #dee2e6;
+    border-radius: 10px;
+}
+
+/* Adaptation pour les écrans très larges */
+@media (min-width: 1400px) {
+    .container.bg-white {
+        max-width: 1000px;
+    }
+}

@@ -1,0 +1,47 @@
+/* Arrière-plan global avec dégradé et image */
+.container-fluid.bg-light {
+    background: 
+        linear-gradient(135deg, rgba(151, 168, 218, 0.8) 0%, rgba(34, 193, 195, 0.7) 100%),
+        url('https://images.unsplash.com/photo-1576091160550-2173dbc999ef?auto=format&fit=crop&q=80&w=2000');
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+    min-height: 100vh;
+}
+
+/* Effet Glassmorphism sur la carte principale */
+.card.shadow-lg {
+    background: rgba(255, 255, 255, 0.8) !important;
+    backdrop-filter: blur(15px); /* Flou de l'arrière-plan */
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Transparence du header et du formulaire pour voir l'effet de flou */
+.card-body.bg-white, .bg-white.p-4.border-bottom {
+    background: rgba(255, 255, 255, 0.4) !important;
+}
+
+/* Style des "sections" internes (blanches pour la lisibilité) */
+.card-body .bg-white.shadow-sm, 
+.card-body .bg-light {
+    background-color: rgba(255, 255, 255, 0.9) !important;
+    border: 1px solid rgba(0, 0, 0, 0.05) !important;
+}
+
+/* Amélioration visuelle du bouton principal */
+.btn-primary.shadow-lg {
+    background: linear-gradient(45deg, #4e73df, #22c1c3);
+    border: none;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.btn-primary.shadow-lg:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 20px rgba(78, 115, 223, 0.4) !important;
+}
+
+/* Style spécifique pour les inputs pour qu'ils ressortent */
+.form-control, .form-select {
+    border: 1px solid rgba(0, 0, 0, 0.1) !important;
+}
