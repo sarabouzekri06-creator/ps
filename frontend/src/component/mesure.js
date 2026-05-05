@@ -1,23 +1,25 @@
 import React, { useState } from 'react';
 import axios from "axios";
+import { useNavigate } from "react-router-dom";
+import "./med.css";
 
 const Mesure = () => {
-  // 1. ÉTAT DU FORMULAIRE (Spécifique aux Mesures)
+  const navigate = useNavigate();
+
   const [formData, setFormData] = useState({
-    diseaseName: "",
-    severity: "Moderate",
-    startDay: "2026-03-28",
-    numberOfDays: 30,
+    diseaseName:   "",
+    severity:      "Moderate",
     frequencyType: "daily",
-    selectedDays: [],
-    dayOfMonth: 1,
-    monthOfYear: "Janvier",
-    instruction: "After meal",
-    reminderColor: "#4e73df",
-    comment: "Suivi de routine",
+    selectedDays:  [],
+    dayOfMonth:    1,
+    comment:       "",
+    unit:          "",       // ← nouveau
+    maxTarget:     "",       // ← nouveau
+    minTarget:     "",       // ← nouveau
   });
 
-  // --- FONCTIONS DE GESTION ---
+  const [takes, setTakes]       = useState([{ take_time: "08:00", label: "Matin" }]);
+  const [submitting, setSubmitting] = useState(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -31,111 +33,189 @@ const Mesure = () => {
     setFormData({ ...formData, selectedDays: days });
   };
 
-  const handleSubmit = async (e) => {
-  e.preventDefault();
-  const token = localStorage.getItem('token');
+  const addTake    = () => setTakes([...takes, { take_time: "12:00", label: "" }]);
+  const removeTake = (i) => setTakes(takes.filter((_, idx) => idx !== i));
+  const updateTake = (i, field, val) => {
+    const t = [...takes];
+    t[i][field] = val;
+    setTakes(t);
+  };
 
-  try {
-   const response = await axios.post('http://127.0.0.1:8000/api/measures', formData, {
-    headers: { 
-        Authorization: `Bearer ${token}`,
-        'Accept': 'application/json', // Force Laravel à répondre en JSON propre
-        'Content-Type': 'application/json'
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!formData.diseaseName.trim()) return alert("Veuillez saisir le nom de la mesure.");
+    setSubmitting(true);
+    const token = localStorage.getItem('token');
+    const payload = { ...formData, takes };
+    try {
+      await axios.post('http://127.0.0.1:8000/api/measures', payload, {
+        headers: { Authorization: `Bearer ${token}`, Accept: 'application/json', 'Content-Type': 'application/json' }
+      });
+      alert("Mesure configurée avec succès !");
+      navigate('/MedicationList');
+    } catch (error) {
+      console.error("Erreur:", error.response);
+      alert(error.response?.data?.message || "Erreur technique.");
+    } finally {
+      setSubmitting(false);
     }
-});
-    alert("Mesure configurée avec succès !");
-    // Optionnel : rediriger vers la liste
-  } catch (error) {
-    console.error("Erreur lors de l'enregistrement:", error.response);
-    alert("Erreur technique lors de l'enregistrement.");
-  }
-};
+  };
+
+  const SEVERITY = [
+    { id: 'Low',      label: 'Légère',  cls: 'btn-success' },
+    { id: 'Moderate', label: 'Modérée', cls: 'btn-warning' },
+    { id: 'High',     label: 'Sévère',  cls: 'btn-danger'  },
+  ];
 
   return (
-    <div className="container-fluid py-5 bg-light min-vh-100">
+    <div className="container-fluid py-5 med-page-bg min-vh-100">
       <div className="row justify-content-center">
         <div className="col-12 col-xl-10">
-          <div className="card border-0 shadow-lg rounded-4 overflow-hidden">
-            
-            {/* HEADER */}
-            <div className="bg-white p-4 border-bottom d-flex align-items-center">
-              <button type="button" className="btn btn-outline-secondary btn-sm rounded-circle me-3">
+          <div className="card med-card border-0 shadow-lg rounded-4 overflow-hidden">
+
+            {/* ── Header ── */}
+            <div className="med-card-header">
+              <button type="button" className="med-back-btn" onClick={() => navigate(-1)}>
                 <i className="bi bi-chevron-left"></i>
               </button>
-              <h3 className="mb-0 fw-bold text-dark">Noter une mesure</h3>
+              <h3>Noter une mesure</h3>
             </div>
 
             <form onSubmit={handleSubmit} className="card-body p-4 p-md-5 bg-white">
               <div className="row g-5">
-                
-                {/* COLONNE GAUCHE : Identification de la mesure */}
+
+                {/* ── COLONNE GAUCHE ── */}
                 <div className="col-md-6">
-                  <div className="mb-4 p-4 rounded-4 border bg-white shadow-sm">
-                    <label className="fw-bold text-dark mb-3 d-block">DÉTAILS DE LA MESURE</label>
-                    
-                    <input 
-                      type="text" 
-                      name="diseaseName" 
-                      className="form-control bg-light border-0 mb-3 py-2" 
-                      placeholder="Nom (ex: Tension, Glycémie, Poids...)" 
-                      value={formData.diseaseName} 
-                      onChange={handleChange} 
+
+                  {/* Nom */}
+                  <div className="mb-4">
+                    <label className="form-label fw-bold text-secondary small">NOM DE LA MESURE</label>
+                    <input
+                      type="text"
+                      name="diseaseName"
+                      className="form-control form-control-lg bg-light border-0"
+                      placeholder="Ex: Tension, Glycémie..."
+                      value={formData.diseaseName}
+                      onChange={handleChange}
                       required
                     />
-                    
-                    <label className="small text-muted mb-2 d-block fw-bold text-uppercase">Importance de l'alerte</label>
-                    <div className="d-flex gap-2 mb-4">
-                      {[
-                        { id: 'Low', label: 'Légère', color: 'success' },
-                        { id: 'Moderate', label: 'Modérée', color: 'warning' },
-                        { id: 'High', label: 'Sévère', color: 'danger' }
-                      ].map((level) => (
-                        <button
-                          key={level.id}
-                          type="button"
-                          className={`btn btn-sm rounded-pill px-3 shadow-sm fw-bold  ${
-                            formData.severity === level.id ? `btn-${level.color} text-white` : `bg-light text-muted`
-                          }`}
-                          onClick={() => setFormData({ ...formData, severity: level.id })}
-                        >
-                          {level.label}
-                        </button>
-                      ))}
-                    </div>
+                  </div>
 
-                   
-                </div>
+                  {/* Unité */}
+<div className="mb-4">
+    <label className="form-label fw-bold text-secondary small">UNITÉ</label>
+    <input
+        type="text"
+        name="unit"
+        className="form-control form-control-lg bg-light border-0"
+        placeholder="Ex: mmHg, g/L, kg..."
+        value={formData.unit}
+        onChange={handleChange}
+    />
+</div>
 
-                  <div className="mt-4">
-                    <label className="form-label fw-bold text-secondary small text-uppercase">Instructions / Moment</label>
+{/* Valeurs cibles */}
+<div className="mb-4">
+    <label className="form-label fw-bold text-secondary small">VALEURS CIBLES (ALERTES)</label>
+    <div className="d-flex gap-2">
+        <div className="flex-grow-1">
+            <label className="form-label small text-muted mb-1">Valeur max</label>
+            <input
+                type="number"
+                name="maxTarget"
+                className="form-control bg-light border-0"
+                placeholder="Ex: 14"
+                value={formData.maxTarget}
+                onChange={handleChange}
+            />
+        </div>
+        <div className="flex-grow-1">
+            <label className="form-label small text-muted mb-1">Valeur min</label>
+            <input
+                type="number"
+                name="minTarget"
+                className="form-control bg-light border-0"
+                placeholder="Ex: 8"
+                value={formData.minTarget}
+                onChange={handleChange}
+            />
+        </div>
+    </div>
+    <small className="text-muted">Une alerte s'affichera si la valeur dépasse ces seuils.</small>
+</div>
+
+                  {/* Sévérité */}
+                  <div className="mb-4">
+                    <label className="form-label fw-bold text-secondary small">SÉVÉRITÉ</label>
                     <div className="d-flex gap-2">
-                      {['Before meal', 'During meal', 'After meal'].map((inst) => (
-                        <button key={inst} type="button" 
-                          onClick={() => setFormData({...formData, instruction: inst})}
-                          className={`btn btn-sm rounded-pill flex-grow-1 ${formData.instruction === inst ? 'btn-primary' : 'btn-outline-secondary opacity-75'}`}>
-                          {inst === 'Before meal' ? 'Avant' : inst === 'During meal' ? 'Pendant' : 'Après'}
+                      {SEVERITY.map(s => (
+                        <button
+                          key={s.id}
+                          type="button"
+                          className={`btn btn-sm rounded-pill px-3 flex-grow-1 fw-bold ${formData.severity === s.id ? s.cls + ' text-white' : 'bg-light text-muted'}`}
+                          onClick={() => setFormData({ ...formData, severity: s.id })}
+                        >
+                          {s.label}
                         </button>
                       ))}
                     </div>
                   </div>
+
+                  {/* Heures des mesures */}
+                  <div className="d-flex justify-content-between align-items-center mb-3">
+                    <label className="fw-bold text-secondary small mb-0">HEURES DES MESURES</label>
+                    <button type="button" className="btn btn-sm btn-primary rounded-pill shadow-sm" onClick={addTake}>
+                      <i className="bi bi-plus-lg me-1"></i> Ajouter
+                    </button>
+                  </div>
+
+                  {takes.map((take, i) => (
+                    <div key={i} className="take-item-card mb-2">
+                      <div className="d-flex gap-2 flex-grow-1 align-items-center">
+                        <input
+                          type="time"
+                          className="form-control bg-light border-0"
+                          value={take.take_time}
+                          onChange={e => updateTake(i, 'take_time', e.target.value)}
+                          style={{ maxWidth: 130 }}
+                        />
+                        <input
+                          type="text"
+                          className="form-control bg-light border-0"
+                          placeholder="Label (ex: Matin)"
+                          value={take.label}
+                          onChange={e => updateTake(i, 'label', e.target.value)}
+                        />
+                      </div>
+                      {takes.length > 1 && (
+                        <button type="button" className="btn btn-link text-danger p-0 ms-2" onClick={() => removeTake(i)}>
+                          <i className="bi bi-trash"></i>
+                        </button>
+                      )}
+                    </div>
+                  ))}
                 </div>
 
-                {/* COLONNE DROITE : Planification */}
+                {/* ── COLONNE DROITE ── */}
                 <div className="col-md-6">
                   <div className="row g-3">
+
+                    {/* Fréquence */}
                     <div className="col-12">
-                      <label className="form-label fw-bold text-secondary small text-uppercase">Fréquence du suivi</label>
-                      <select name="frequencyType" className="form-select bg-light border-0 py-2" value={formData.frequencyType} onChange={handleChange}>
+                      <label className="form-label fw-bold text-secondary small">FRÉQUENCE DU SUIVI</label>
+                      <select name="frequencyType" className="form-select bg-light border-0" value={formData.frequencyType} onChange={handleChange}>
                         <option value="daily">Chaque jour</option>
                         <option value="weekly">Jours spécifiques</option>
                         <option value="monthly">Une fois par mois</option>
+                        <option value="every2months">Tous les 2 mois</option>  
+                        <option value="quarterly">Tous les 3 mois</option>  
                       </select>
                     </div>
 
                     {formData.frequencyType === 'weekly' && (
                       <div className="col-12 py-2">
                         <div className="d-flex flex-wrap gap-2">
-                          {['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'].map((day) => (
+                          {['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'].map(day => (
                             <button key={day} type="button" onClick={() => toggleDay(day)}
                               className={`btn btn-sm rounded-pill px-3 ${formData.selectedDays.includes(day) ? 'btn-primary' : 'btn-outline-secondary'}`}>
                               {day}
@@ -145,51 +225,64 @@ const Mesure = () => {
                       </div>
                     )}
 
-                    {formData.frequencyType === 'monthly' && (
-                      <div className="col-12">
-                        <div className="row g-2">
-                          <div className="col-7">
-                            <select name="monthOfYear" className="form-select bg-light border-0" value={formData.monthOfYear} onChange={handleChange}>
-                              {["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"].map(m => <option key={m} value={m}>{m}</option>)}
-                            </select>
-                          </div>
-                          <div className="col-5">
-                            <input type="number" name="dayOfMonth" className="form-control bg-light border-0 text-center" min="1" max="31" value={formData.dayOfMonth} onChange={handleChange} />
-                          </div>
-                        </div>
-                      </div>
-                    )}
+                  {formData.frequencyType === 'monthly' && (
+    <div className="col-12">
+        <label className="form-label fw-bold text-secondary small">JOUR DE LA MESURE</label>
+        <input
+            type="number"
+            name="dayOfMonth"
+            className="form-control bg-light border-0 text-center"
+            min="1" max="31"
+            value={formData.dayOfMonth}
+            onChange={handleChange}
+            placeholder="Ex: 15"
+        />
+        <small className="text-muted">La mesure sera faite ce jour, chaque mois.</small>
+    </div>
+)}
 
-                    <div className="col-sm-6 mt-3">
-                      <label className="form-label fw-bold text-secondary small text-uppercase">Date de début</label>
-                      <input type="date" name="startDay" className="form-control bg-light border-0" value={formData.startDay} onChange={handleChange} />
-                    </div>
-                    
-                    <div className="col-sm-6 mt-3">
-                      <label className="form-label fw-bold text-secondary small text-uppercase">Durée (jours)</label>
-                      <div className="input-group bg-light rounded-3 border">
-                        <button className="btn border-0 text-primary fw-bold" type="button" onClick={() => setFormData({...formData, numberOfDays: Math.max(1, formData.numberOfDays - 1)})}>-</button>
-                        <input type="text" className="form-control bg-light border-0 text-center fw-bold" value={formData.numberOfDays} readOnly />
-                        <button className="btn border-0 text-primary fw-bold" type="button" onClick={() => setFormData({...formData, numberOfDays: formData.numberOfDays + 1})}>+</button>
-                      </div>
-                    </div>
+{(formData.frequencyType === 'every2months' || formData.frequencyType === 'quarterly') && (
+    <div className="col-12">
+        <label className="form-label fw-bold text-secondary small">JOUR DE LA MESURE</label>
+        <input
+            type="number"
+            name="dayOfMonth"
+            className="form-control bg-light border-0 text-center"
+            min="1" max="31"
+            value={formData.dayOfMonth}
+            onChange={handleChange}
+            placeholder="Ex: 15"
+        />
+        <small className="text-muted">
+            {formData.frequencyType === 'every2months'
+                ? 'La mesure sera faite ce jour, tous les 2 mois.'
+                : 'La mesure sera faite ce jour, tous les 3 mois.'}
+        </small>
+    </div>
+)}
 
-                    <div className="col-sm-12 mt-4">
-                      <label className="form-label fw-bold text-secondary small text-uppercase d-block">Couleur du rappel sur le calendrier</label>
-                      <input type="color" name="reminderColor" className="form-control form-control-color w-25 border-0 bg-transparent" value={formData.reminderColor} onChange={handleChange} />
-                    </div>
+                  
+
+                    {/* Number of days */}
+                   
                   </div>
 
+                  {/* Commentaire */}
                   <div className="mt-4">
-                    <label className="form-label fw-bold text-secondary small text-uppercase">Notes / Commentaires</label>
-                    <textarea name="comment" className="form-control bg-light border-0 rounded-3" rows="3" value={formData.comment} onChange={handleChange} placeholder="Ajoutez une note..."></textarea>
+                    <label className="form-label fw-bold text-secondary small">NOTES / COMMENTAIRES</label>
+                    <textarea name="comment" className="form-control bg-light border-0" rows="3"
+                      placeholder="Ajoutez une note..." value={formData.comment} onChange={handleChange}></textarea>
                   </div>
                 </div>
               </div>
 
+              {/* Save */}
               <div className="text-center mt-5">
-                <button type="submit" className="btn btn-primary px-5 py-3 rounded-pill fw-bold shadow-lg text-uppercase" style={{letterSpacing: '1px'}}>
-                  Enregistrer la mesure
+                <button type="submit" className="btn btn-primary px-5 py-3 rounded-pill fw-bold shadow-lg" disabled={submitting}>
+                  {submitting
+                    ? <><span className="spinner-border spinner-border-sm me-2"></span>Enregistrement...</>
+                    : <><i className="bi bi-check-lg me-2"></i>Enregistrer la mesure</>
+                  }
                 </button>
               </div>
             </form>

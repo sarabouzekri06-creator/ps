@@ -1,91 +1,390 @@
-.medication-list-bg {
-    background-color: #f8f9fc;
+/* ── VARIABLE & LAYOUT ── */
+:root {
+  --bg-color: #f4f7fe;
+  --text-main: #2d3748;
+  --text-muted: #718096;
+  --danger: #e74a3b;
 }
 
-/* Style des cartes */
-.med-card {
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
+.ml-page {
+  padding: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+  min-height: 100vh;
+  background-color: var(--bg-color);
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
-.med-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 15px 30px rgba(0,0,0,0.08) !important;
+/* ── HEADER ── */
+.ml-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
 }
 
-/* Zone de notification interne */
-.notification-box {
-    background-color: #f0f4ff;
-    border-left: 4px solid #4e73df;
+.ml-header-text h1 {
+  font-size: 1.8rem;
+  color: var(--text-main);
+  margin: 0;
 }
 
-/* Gestion de l'icône/image */
-.med-icon-container {
-    width: 60px;
-    height: 60px;
-    flex-shrink: 0;
+.ml-header-text p {
+  color: var(--text-muted);
+  margin: 0;
 }
 
-.med-img-preview {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    border-radius: 12px;
+.ml-btn-add {
+  background: #4e73df;
+  color: white;
+  padding: 0.75rem 1.5rem;
+  border-radius: 10px;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  transition: transform 0.2s;
 }
 
-.med-placeholder {
-    width: 100%;
-    height: 100%;
-    background-color: #eef2f7;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 12px;
+.ml-btn-add:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(78, 115, 223, 0.3);
 }
 
-/* Badges et boutons */
-.badge {
-    font-weight: 500;
-    font-size: 0.75rem;
+/* ── CONTROLS (Search & Filters) ── */
+.ml-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
 }
 
-.btn-primary {
-    background-color: #4e73df;
-    border: none;
+.ml-search {
+  flex: 1;
+  min-width: 250px;
+  position: relative;
+  background: white;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  padding: 0 1rem;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
 }
 
-/* ... styles précédents ... */
-
-/* Effet visuel quand le médicament est désactivé */
-.disabled-med {
-    opacity: 0.7;
-    filter: grayscale(0.4);
-    background-color: #fcfcfc !important;
+.ml-search input {
+  border: none;
+  padding: 0.8rem;
+  width: 100%;
+  outline: none;
 }
 
-.box-off {
-    background-color: #f1f3f5 !important;
-    border-left: 4px solid #adb5bd !important;
+.ml-filters {
+  display: flex;
+  gap: 0.5rem;
 }
 
-/* Custom Switch Style */
-.custom-switch {
-    width: 2.2rem !important;
-    height: 1.1rem !important;
-    cursor: pointer;
-    background-color: #d1d3e2;
-    border-color: transparent !important;
+.ml-filter-btn {
+  border: none;
+  background: white;
+  padding: 0.6rem 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--text-muted);
+  transition: all 0.2s;
 }
 
-.custom-switch:checked {
-    background-color: #4e73df !important;
+.ml-filter-btn.active {
+  background: #4e73df;
+  color: white;
 }
 
-.custom-switch:focus {
-    box-shadow: none !important;
-    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%23fff'/%3e%3c/svg%3e") !important;
+/* ── STATS ── */
+.ml-stats {
+  display: flex;
+  background: white;
+  padding: 1.2rem;
+  border-radius: 15px;
+  margin-bottom: 2rem;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.02);
 }
 
-/* Animation douce pour le changement d'état */
-.med-card {
-    transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+.ml-stat {
+  flex: 1;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+}
+
+.ml-stat-val {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #4e73df;
+}
+
+.ml-stat-lbl {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.ml-stat-divider {
+  width: 1px;
+  background: #edf2f7;
+  margin: 0 1rem;
+}
+
+.ml-stat-danger .ml-stat-val {
+  color: var(--danger);
+}
+
+/* ── GRID & CARDS ── */
+.ml-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1.5rem;
+}
+
+.ml-card {
+  background: white;
+  border-radius: 16px;
+  overflow: hidden;
+  position: relative;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+  transition: all 0.3s ease;
+  animation: fadeIn 0.4s ease forwards;
+  opacity: 0;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.ml-card-stripe {
+  height: 6px;
+  width: 100%;
+}
+
+.ml-card-body {
+  padding: 1.5rem;
+}
+
+/* AVATAR & INFO */
+.ml-card-top {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.2rem;
+}
+
+.ml-med-avatar {
+  width: 55px;
+  height: 55px;
+  border-radius: 12px;
+  border: 2px solid;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  overflow: hidden;
+}
+
+.ml-med-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ml-med-name {
+  margin: 0;
+  font-size: 1.15rem;
+  color: var(--text-main);
+}
+
+.ml-tag {
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-weight: 600;
+}
+
+.ml-tag-gray {
+  background: #f1f3f5;
+  color: #6c757d;
+}
+
+/* SWITCH (Toggle) */
+.ml-switch {
+  margin-left: auto;
+  position: relative;
+  width: 44px;
+  height: 22px;
+}
+
+.ml-switch input { opacity: 0; width: 0; height: 0; }
+
+.ml-switch-track {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: #d1d3e2;
+  border-radius: 34px;
+  cursor: pointer;
+  transition: 0.3s;
+}
+
+.ml-switch-track:before {
+  position: absolute;
+  content: "";
+  height: 16px; width: 16px;
+  left: 3px; bottom: 3px;
+  background: white;
+  border-radius: 50%;
+  transition: 0.3s;
+}
+
+.ml-switch input:checked + .ml-switch-track {
+  background: var(--sw-color);
+}
+
+.ml-switch input:checked + .ml-switch-track:before {
+  transform: translateX(22px);
+}
+
+/* PROCHAINE DOSE */
+.ml-next-dose {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.8rem;
+  border-radius: 10px;
+  border: 1px solid;
+  margin-bottom: 1rem;
+}
+
+/* STOCK PROGRESS */
+.ml-stock {
+  margin-top: 1rem;
+}
+
+.ml-stock-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  margin-bottom: 0.4rem;
+}
+
+.ml-progress-track {
+  height: 8px;
+  background: #edf2f7;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.ml-progress-bar {
+  height: 100%;
+  border-radius: 10px;
+  transition: width 0.5s ease-in-out;
+}
+
+/* ACTIONS */
+.ml-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid #f1f3f5;
+}
+
+.ml-btn-edit, .ml-btn-delete {
+  flex: 1;
+  padding: 0.6rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  text-decoration: none;
+  transition: background 0.2s;
+}
+
+.ml-btn-edit { background: #f8f9fc; color: #4e73df; }
+.ml-btn-delete { background: #fff5f5; color: var(--danger); }
+
+.ml-btn-edit:hover { background: #eaecf4; }
+.ml-btn-delete:hover { background: #fee2e2; }
+
+/* LOADING STATE */
+.ml-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+}
+
+.ml-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #4e73df;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+
+
+/* ══════════════════════════════════════════════
+   À AJOUTER dans ton list.css existant
+══════════════════════════════════════════════ */
+
+/* ── TAB SWITCHER (2 boutons en haut) ── */
+.hd-tab-switcher {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 28px;
+  background: #f0f2fa;
+  border-radius: 16px;
+  padding: 6px;
+}
+
+.hd-tab-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: #8a8fa8;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  letter-spacing: 0.3px;
+}
+
+.hd-tab-btn i {
+  font-size: 1.1rem;
+}
+
+.hd-tab-btn:hover:not(.hd-tab-active) {
+  background: rgba(78, 115, 223, 0.08);
+  color: #4e73df;
+}
+
+.hd-tab-active {
+  background: #fff;
+  color: #4e73df;
+  box-shadow: 0 2px 12px rgba(78, 115, 223, 0.18);
 }

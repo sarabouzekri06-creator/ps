@@ -11,15 +11,13 @@ return new class extends Migration
      */
     public function up(): void
     {
-      Schema::create('medication_takes', function (Blueprint $table) {
+       Schema::create('measure_takes', function (Blueprint $table) {
     $table->id();
-    $table->foreignId('medication_id')->constrained('medications')->onDelete('cascade');
+    // On lie à la mesure principale (ex: Tension)
+    $table->foreignId('measure_id')->constrained('measures')->onDelete('cascade');
 
-    $table->time('take_time');
-    $table->decimal('dose', 8, 2);
-    $table->string('unit');
-    $table->string('status')->default('pending');
-
+    $table->time('take_time'); // L'heure prévue (ex: 08:00)
+    $table->string('label')->nullable(); // Ex: "À jeun", "Après sport"
     $table->timestamps();
 });
     }
@@ -29,6 +27,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('medi_takes');
+        Schema::dropIfExists('mesure_takes');
     }
 };

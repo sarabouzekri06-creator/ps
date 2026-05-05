@@ -26,6 +26,12 @@ class Utilisateur extends Authenticatable
         'is_profile_complete',
     ];
 
+    public function userNotifications()
+{
+    // On précise bien qu'on utilise 'user_id' comme lien
+    return $this->hasMany(Notification::class, 'user_id');
+}
+
     protected $hidden = [
         'password',
         'remember_token',

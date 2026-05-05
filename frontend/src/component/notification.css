@@ -1,98 +1,352 @@
-/* Fond de la page avec un léger dégradé pour faire ressortir la carte blanche */
-.bg-notif-gradient {
-    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-    font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+/* ═══════════════════════════════════════════
+   NOTIFICATION — bleu clair, responsive
+═══════════════════════════════════════════ */
+
+/* ── Page ── */
+.nf-page {
+  min-height: 100vh;
+  background: #eaf2fb;
+  padding: 1.5rem 1rem 3rem;
+  font-family: system-ui, -apple-system, sans-serif;
 }
 
-/* Conteneur principal de la page */
-.container.bg-white {
-    max-width: 900px; /* Largeur optimale pour la lecture sur PC */
-    min-height: 85vh;
-    border: 1px solid rgba(0,0,0,0.05);
+.nf-container {
+  max-width: 1000px;
+  margin: 0 auto;
 }
 
-/* Style des cartes de notification */
-.card {
-    transition: all 0.3s ease;
-    border: 1px solid #f0f0f0 !important;
-    background-color: #ffffff;
+/* ── Header ── */
+.nf-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 1.25rem;
 }
 
-.card:hover {
-    transform: translateY(-2px);
-    shadow: 0 10px 20px rgba(0,0,0,0.05);
-    border-color: #e0e0e0 !important;
+.nf-title {
+  font-size: clamp(20px, 4vw, 26px);
+  font-weight: 700;
+  color: #1a2a4a;
+  margin: 0;
 }
 
-/* La boîte d'icône (le carré de couleur à gauche) */
-.notif-icon-box {
-    width: 60px;
-    height: 60px;
-    border: 2px dashed rgba(0,0,0,0.1) !important;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: transform 0.2s ease;
+.nf-subtitle {
+  font-size: 13px;
+  color: #6c757d;
+  margin: 3px 0 0;
 }
 
-.card:hover .notif-icon-box {
-    transform: scale(1.05);
+.nf-gear {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid #e2ecf8;
+  background: #fff;
+  color: #4e73df;
+  font-size: 15px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background .15s;
+}
+.nf-gear:hover { background: #e2ecf8; }
+
+/* ── Sélecteur de jours ── */
+.nf-day-strip {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 1.25rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+.nf-day-strip::-webkit-scrollbar { display: none; }
+
+.nf-day-btn {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 8px 10px;
+  min-width: 56px;
+  border: 1.5px solid #e2ecf8;
+  border-radius: 12px;
+  background: #fff;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all .15s;
+}
+.nf-day-btn:hover { border-color: #4e73df; background: #f0f5ff; }
+.nf-day-btn.active { background: #4e73df; border-color: #4e73df; color: #fff; }
+
+.nf-day-name {
+  font-size: 10px;
+  font-weight: 600;
+  color: inherit;
+  opacity: .75;
+  text-transform: capitalize;
+}
+.nf-day-num {
+  font-size: 16px;
+  font-weight: 700;
+  color: inherit;
+  line-height: 1;
 }
 
-/* Point de notification "Non lu" */
-.unread-dot {
-    width: 10px;
-    height: 10px;
-    background-color: #ff4d4f; /* Rouge vif */
-    border-radius: 50%;
-    box-shadow: 0 0 0 3px rgba(255, 77, 79, 0.2);
+.nf-day-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #e74a3b;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #eaf2fb;
 }
 
-/* Typographie */
-.notif-text {
-    font-size: 0.95rem;
-    color: #6c757d;
-    max-width: 85%; /* Évite que le texte ne s'étale trop sur PC */
+/* ── Spinner ── */
+.nf-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 3rem 0;
+  color: #6c757d;
+  font-size: 13px;
+}
+.nf-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #e2ecf8;
+  border-top-color: #4e73df;
+  border-radius: 50%;
+  animation: nf-spin .7s linear infinite;
+}
+@keyframes nf-spin { to { transform: rotate(360deg); } }
+
+/* ── Empty ── */
+.nf-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 3rem 1rem;
+  text-align: center;
+}
+.nf-empty-circle {
+  position: relative;
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  background: #d0e6f8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36px;
+  color: #4e73df;
+  margin-bottom: 1rem;
+}
+.nf-zzz {
+  position: absolute;
+  top: -4px;
+  right: -10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #4e73df;
+  letter-spacing: 2px;
+}
+.nf-empty-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1a2a4a;
+  margin: 0 0 6px;
+}
+.nf-empty-sub {
+  font-size: 13px;
+  color: #6c757d;
+  margin: 0;
 }
 
-h5 {
-    color: #2d3436;
-    font-size: 1.1rem;
+/* ── Liste ── */
+.nf-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-/* Actions (liens cliquables en bas) */
-.btn-link {
-    text-decoration: none;
-    transition: opacity 0.2s;
-    font-size: 0.85rem;
-    color: #4e73df !important; /* Bleu pro */
+/* ── Card ── */
+.nf-card {
+  position: relative;
+  margin-bottom: 5px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #fff;
+  border: 1px solid #e2ecf8;
+  border-radius: 14px;
+  padding: 12px 14px 12px 18px;
+  animation: nf-fadeUp .25s ease both;
+  transition: box-shadow .2s, border-color .2s;
+}
+.nf-card:hover { box-shadow: 0 4px 16px rgba(78,115,223,.1); border-color: #b8d0f0; }
+
+@keyframes nf-fadeUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
-.btn-link:hover {
-    text-decoration: underline;
-    opacity: 0.8;
+.nf-card-late   { border-color: #fcc; background: #fffafa; }
+.nf-card-done   { opacity: .6; background: #f8fff8; border-color: #c8f2e0; }
+.nf-card-future { opacity: .75; background: #f8faff; }
+
+/* Point non-lu */
+.nf-dot {
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
 }
 
-/* Bouton Paramètres (en haut à droite) */
-.bg-light-purple {
-    background-color: #f3f0ff;
+/* Icône */
+.nf-icon {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  font-size: 20px;
 }
-.text-purple {
-    color: #6741d9;
+.nf-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 12px;
 }
 
-/* Personnalisation de la barre de défilement si la liste est longue */
-.container::-webkit-scrollbar {
-    width: 6px;
-}
-.container::-webkit-scrollbar-thumb {
-    background-color: #dee2e6;
-    border-radius: 10px;
+/* Contenu */
+.nf-content { flex: 1; min-width: 0; }
+
+.nf-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 3px;
 }
 
-/* Adaptation pour les écrans très larges */
-@media (min-width: 1400px) {
-    .container.bg-white {
-        max-width: 1000px;
-    }
+.nf-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1a2a4a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nf-time {
+  font-size: 12px;
+  color: #adb5bd;
+  font-weight: 500;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.nf-time-late { color: #e74a3b; font-weight: 700; }
+
+.nf-sub {
+  font-size: 12px;
+  color: #6c757d;
+  margin: 0 0 5px;
+  line-height: 1.4;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+
+/* Badges */
+.nf-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 999px;
+}
+.nf-badge-late   { background: #fdecea; color: #e74a3b; }
+.nf-badge-future { background: #eaf2fb; color: #4e73df; }
+.nf-badge-missed { background: #fdecea; color: #e74a3b; }
+
+/* Actions */
+.nf-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.nf-btn-done {
+  font-size: 12px;
+  font-weight: 700;
+  color: #4e73df;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: color .15s;
+}
+.nf-btn-done:hover { color: #2a4fbf; }
+
+.nf-btn-skip {
+  font-size: 12px;
+  font-weight: 600;
+  color: #adb5bd;
+  cursor: pointer;
+}
+.nf-btn-skip:hover { color: #4e73df; }
+
+.nf-sep { color: #dee2e6; font-size: 12px; }
+
+.nf-done-label   { font-size: 12px; color: #1cc88a; font-weight: 600; }
+.nf-missed-label { font-size: 12px; color: #e74a3b; font-weight: 600; }
+.nf-future-label { font-size: 12px; color: #adb5bd; }
+
+/* ═══════════════════════════════════════════
+   RESPONSIVE
+═══════════════════════════════════════════ */
+
+/* Tablette */
+@media (min-width: 576px) {
+  .nf-page { padding: 2rem 1.5rem 3rem; }
+  .nf-card { padding: 14px 18px 14px 22px; }
+  .nf-icon { width: 48px; height: 48px; min-width: 48px; }
+  .nf-name { font-size: 15px; }
+  .nf-day-btn { min-width: 68px; padding: 10px 14px; }
+  .nf-day-num { font-size: 18px; }
+}
+
+/* Desktop */
+@media (min-width: 992px) {
+  .nf-page { padding: 2.5rem 2rem 4rem; }
+  .nf-title { font-size: 28px; }
+}
+
+/* Mobile très petit */
+@media (max-width: 360px) {
+  .nf-day-btn { min-width: 48px; padding: 6px 8px; }
+  .nf-day-num { font-size: 14px; }
+  .nf-name    { font-size: 13px; }
+  .nf-icon    { width: 38px; height: 38px; min-width: 38px; font-size: 17px; }
 }

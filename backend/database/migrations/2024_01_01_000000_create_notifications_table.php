@@ -11,14 +11,14 @@ return new class extends Migration
      */
     public function up(): void
     {
-       Schema::create('medications', function (Blueprint $table) {
+       Schema::create('notifications', function (Blueprint $table) {
     $table->id();
     $table->foreignId('user_id')->constrained('utilisateurs')->onDelete('cascade');
-    $table->foreignId('notification_id')->constrained('notifications')->onDelete('cascade');
-    $table->string('medication_name');
-    $table->string('medication_image')->nullable();
-    $table->integer('current_stock')->default(0);
-     $table->string('comment')->nullable();
+    $table->enum('type', ['medication', 'measure']); // Pour savoir ce qu'on déclenche
+    $table->date('start_day');
+    $table->integer('number_of_days');
+    $table->string('frequency_type');
+    $table->json('frequency_details')->nullable();
     $table->boolean('is_active')->default(true);
     $table->timestamps();
 });
@@ -29,6 +29,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('medications');
+        Schema::dropIfExists('notifications');
     }
 };

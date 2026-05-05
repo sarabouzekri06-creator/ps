@@ -7,25 +7,44 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Measure extends Model
 {
-    protected $fillable = [
-    'user_id', 'disease_name', 'severity', 'start_day', 
-    'number_of_days', 'frequency_type', 'selected_days', 
-    'instruction', 'reminder_color', 'comment'
-    ];
+    // Ajout de user_id pour éviter l'erreur "Field doesn't have a default value"
+  protected $fillable = [
+    'notification_id',
+    'user_id',
+    'disease_name',
+    'severity',
+    'unit',        // ← nouveau
+    'max_target',  // ← nouveau
+    'min_target',  // ← nouveau
+    'is_active',
+];
 
     /**
-     * CRUCIAL : Transforme automatiquement l'array en JSON et inversement.
+     * Relation avec la notification (le planning)
      */
-    protected $casts = [
-        'selected_days' => 'array',
-        'start_day' => 'date',
-    ];
+    public function notification(): BelongsTo
+    {
+        return $this->belongsTo(Notification::class);
+    }
 
     /**
-     * Relation avec l'utilisateur (Utilisateur ou User selon votre projet)
+     * Relation avec l'utilisateur
      */
     public function user(): BelongsTo
     {
+        // On précise 'utilisateurs' car c'est le nom de ta table personnalisée
         return $this->belongsTo(Utilisateur::class, 'user_id');
     }
+
+
+  // Assure-toi que cette fonction existe bien
+public function takes()
+{
+    return $this->hasMany(MeasureTake::class);
+}
+
+public function history()
+{
+    return $this->hasMany(MeasureResult::class);
+}
 }

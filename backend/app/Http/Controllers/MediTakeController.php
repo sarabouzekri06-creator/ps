@@ -8,3 +8,4 @@ class MediTakeController extends Controller
 {
     protected $fillable = ['medication_id', 'take_time', 'dose', 'unit'];
 }
+//

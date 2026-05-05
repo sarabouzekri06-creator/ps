@@ -7,14 +7,33 @@ use App\Models\MediTake;
 
 class Medication extends Model
 {
-    protected $fillable = [
-    'user_id', 'medication_name', 'current_stock', 'low_stock_alert', 
-    'start_day', 'number_of_days', 'frequency_type', 'frequency_details', 
-    'instruction', 'reminder_color', 'comment', 'is_active'
+
+// protected $fillable = ['notification_id','user_id', 'medication_name', 'medication_image', 'current_stock'];
+
+protected $fillable = [
+    'user_id',
+    'notification_id',
+    'medication_name',
+    'medication_image',
+    'current_stock',
+    'is_active'
 ];
 
-// Dans App\Models\Medication.php
-public function takes() {
-    return $this->hasMany(MediTake::class, 'medication_id');
-}
+    // Le lien vers la notification (Inverse)
+    public function notification()
+    {
+        return $this->belongsTo(Notification::class);
+    }
+
+    // Un médicament a PLUSIEURS heures de prise
+    public function takes()
+    {
+        return $this->hasMany(MediTake::class, 'medication_id');
+    }
+
+     public function user(): BelongsTo
+    {
+        // On précise 'utilisateurs' car c'est le nom de ta table personnalisée
+        return $this->belongsTo(Utilisateur::class, 'user_id');
+    }
 }

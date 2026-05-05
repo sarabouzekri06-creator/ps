@@ -44,35 +44,37 @@ class AuthController extends Controller
 
     return response(['user' => $user, 'token' => $token], 200);
 }
-
 public function updateProfile(Request $request) {
     try {
         $user = $request->user();
 
-        // Si une image est envoyée
+        // 1. On initialise $path avec la valeur actuelle pour éviter l'erreur "Undefined variable"
+        // On récupère l'image déjà existante si aucune nouvelle n'est envoyée
+        $path = $user->profile_image;
+
+        // 2. Gestion de la nouvelle image
         if ($request->hasFile('image')) {
-            // Enregistre l'image dans le dossier 'storage/app/public/profiles'
             $path = $request->file('image')->store('profiles', 'public');
-            // Sauvegarde le chemin dans la base de données
-            $user->profile_image = $path;
+            // Optionnel : tu peux supprimer l'ancienne image ici si tu veux gagner de l'espace
         }
 
+        // 3. Mise à jour globale
+        // ATTENTION : Vérifie bien si ta colonne s'appelle 'profile_image' ou 'profil_image'
         $user->update([
             'nom' => $request->nom,
             'prenom' => $request->prenom,
             'age' => $request->age,
             'maladies' => $request->maladies,
-            'profil_image'=>$path,
+            'profile_image' => $path, // Utilisation de la variable sécurisée
             'notification_type' => $request->notificationType,
             'contact_alerte_email' => $request->contactAlerte,
             'is_profile_complete' => true,
         ]);
 
         return response()->json([
-            'message' => 'Profil et image mis à jour !',
-            'user' => $user,
-            // On renvoie l'URL complète de l'image
-            'image_url' => $user->profile_image ? asset('storage/' . $user->profile_image) : null
+            'message' => 'Profil mis à jour avec succès !',
+            'user' => $user->fresh(), // .fresh() pour récupérer les données à jour
+            'image_url' => $path ? asset('storage/' . $path) : null
         ]);
 
     } catch (\Exception $e) {
