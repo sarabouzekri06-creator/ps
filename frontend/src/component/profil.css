@@ -1,0 +1,502 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@300;400;500;600&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+/* ── Variables couleurs ──────────────────────────────────────────────────── */
+:root {
+  /* Fond page */
+  --pf-bg:          #f0f4ff;
+
+  /* Blanc */
+  --pf-white:       #ffffff;
+  --pf-card-border: #e2e8f0;
+
+  /* Sidebar — bleu foncé */
+  --pf-sidebar-bg:   #1e3a8a;
+  --pf-sidebar-deep: #1e40af;
+
+  /* Accent — bleu clair */
+  --pf-accent:       #3b82f6;
+  --pf-accent-dark:  #2563eb;
+  --pf-accent-light: #eff6ff;
+  --pf-accent-muted: rgba(59, 130, 246, 0.12);
+
+  /* Textes */
+  --pf-text-primary:   #0f172a;
+  --pf-text-secondary: #64748b;
+  --pf-text-muted:     #94a3b8;
+  --pf-text-light:     #f0f9ff;
+  --pf-text-faded:     rgba(240, 249, 255, 0.5);
+
+  /* Champs */
+  --pf-input-bg:     #f8faff;
+  --pf-input-border: #dbeafe;
+  --pf-input-focus:  #3b82f6;
+
+  /* Typographie */
+  --pf-font-display: 'Fraunces', serif;
+  --pf-font-body:    'DM Sans', sans-serif;
+}
+
+/* ── Reset ───────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+/* ── Root ────────────────────────────────────────────────────────────────── */
+.pf-root {
+  min-height: 100vh;
+  background: var(--pf-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  font-family: var(--pf-font-body);
+}
+
+/* ── Card ────────────────────────────────────────────────────────────────── */
+.pf-card {
+  background: var(--pf-white);
+  border-radius: 28px;
+  width: 100%;
+  max-width: 880px;
+  box-shadow: 0 8px 48px rgba(59, 130, 246, 0.1);
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  min-height: 560px;
+}
+
+@media (max-width: 700px) {
+  .pf-card {
+    grid-template-columns: 1fr;
+  }
+  .pf-sidebar {
+    border-bottom: 1px solid var(--pf-card-border);
+  }
+}
+
+/* ── Sidebar ─────────────────────────────────────────────────────────────── */
+.pf-sidebar {
+  background: var(--pf-sidebar-bg);
+  padding: 40px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.pf-sidebar::before {
+  content: '';
+  position: absolute;
+  top: -60px;
+  right: -60px;
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  background: rgba(59, 130, 246, 0.15);
+}
+
+.pf-sidebar::after {
+  content: '';
+  position: absolute;
+  bottom: -40px;
+  left: -40px;
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  background: rgba(147, 197, 253, 0.1);
+}
+
+/* ── Avatar ──────────────────────────────────────────────────────────────── */
+.pf-avatar-wrap {
+  position: relative;
+  margin-bottom: 20px;
+  z-index: 1;
+}
+
+.pf-avatar {
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 3px solid rgba(147, 197, 253, 0.5);
+  background: var(--pf-sidebar-deep);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pf-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.pf-avatar-initials {
+  font-family: var(--pf-font-display);
+  font-size: 32px;
+  font-weight: 500;
+  color: #93c5fd;
+  letter-spacing: 2px;
+}
+
+.pf-avatar-upload {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--pf-accent);
+  border: 2.5px solid var(--pf-sidebar-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.2s, background 0.2s;
+  z-index: 2;
+}
+
+.pf-avatar-upload:hover {
+  transform: scale(1.1);
+  background: var(--pf-accent-dark);
+}
+
+.pf-avatar-upload i {
+  color: var(--pf-white);
+  font-size: 12px;
+}
+
+/* ── Sidebar textes ──────────────────────────────────────────────────────── */
+.pf-sidebar-name {
+  font-family: var(--pf-font-display);
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--pf-text-light);
+  text-align: center;
+  margin: 0 0 4px;
+  z-index: 1;
+}
+
+.pf-sidebar-email {
+  font-size: 12px;
+  color: var(--pf-text-faded);
+  text-align: center;
+  margin: 0 0 28px;
+  z-index: 1;
+}
+
+/* ── Stat cards sidebar ──────────────────────────────────────────────────── */
+.pf-stat {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(147, 197, 253, 0.2);
+  border-radius: 14px;
+  padding: 14px 18px;
+  margin-bottom: 10px;
+  z-index: 1;
+}
+
+.pf-stat-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #93c5fd;
+  margin-bottom: 4px;
+  opacity: 0.8;
+}
+
+.pf-stat-val {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--pf-text-light);
+}
+
+/* ── Badge notification ──────────────────────────────────────────────────── */
+.pf-notif-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(59, 130, 246, 0.2);
+  border: 1px solid rgba(147, 197, 253, 0.35);
+  color: #93c5fd;
+  border-radius: 99px;
+  padding: 4px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-top: 16px;
+  z-index: 1;
+}
+
+/* ── Bouton outline sidebar ──────────────────────────────────────────────── */
+.pf-edit-btn {
+  margin-top: auto;
+  padding-top: 20px;
+  z-index: 1;
+}
+
+.pf-btn-outline {
+  border: 1.5px solid rgba(147, 197, 253, 0.5);
+  background: transparent;
+  color: #93c5fd;
+  border-radius: 99px;
+  padding: 8px 22px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: var(--pf-font-body);
+}
+
+.pf-btn-outline:hover {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: #93c5fd;
+}
+
+/* ── Main ────────────────────────────────────────────────────────────────── */
+.pf-main {
+  padding: 40px 40px 36px;
+  display: flex;
+  flex-direction: column;
+}
+
+.pf-main-title {
+  font-family: var(--pf-font-display);
+  font-size: 24px;
+  font-weight: 500;
+  color: var(--pf-text-primary);
+  margin: 0 0 28px;
+  letter-spacing: -0.3px;
+}
+
+/* ── Grille formulaire ───────────────────────────────────────────────────── */
+.pf-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.pf-full {
+  grid-column: 1 / -1;
+}
+
+/* ── Champ ───────────────────────────────────────────────────────────────── */
+.pf-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.pf-field label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--pf-text-muted);
+}
+
+.pf-input {
+  padding: 11px 16px;
+  border: 1.5px solid var(--pf-input-border);
+  border-radius: 12px;
+  font-size: 14px;
+  font-family: var(--pf-font-body);
+  background: var(--pf-input-bg);
+  color: var(--pf-text-primary);
+  outline: none;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.pf-input:focus {
+  border-color: var(--pf-input-focus);
+  background: var(--pf-white);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.08);
+}
+
+/* ── Radio cards notification ────────────────────────────────────────────── */
+.pf-notif-group {
+  display: flex;
+  gap: 12px;
+}
+
+.pf-radio-card {
+  flex: 1;
+  border: 1.5px solid var(--pf-input-border);
+  border-radius: 14px;
+  padding: 14px 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transition: all 0.2s;
+  background: var(--pf-input-bg);
+}
+
+.pf-radio-card.active {
+  border-color: var(--pf-accent);
+  background: var(--pf-accent-light);
+}
+
+.pf-radio-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--pf-accent);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.pf-radio-dot.checked::after {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--pf-accent);
+  display: block;
+}
+
+.pf-radio-text {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--pf-text-primary);
+}
+
+.pf-radio-sub {
+  font-size: 11px;
+  color: var(--pf-text-muted);
+}
+
+/* ── Bouton submit ───────────────────────────────────────────────────────── */
+.pf-submit {
+  width: 100%;
+  padding: 13px;
+  border: none;
+  border-radius: 14px;
+  background: var(--pf-sidebar-bg);
+  color: var(--pf-text-light);
+  font-size: 13px;
+  font-weight: 700;
+  font-family: var(--pf-font-body);
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  margin-top: 8px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.pf-submit:hover    { background: var(--pf-sidebar-deep); }
+.pf-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* ── Vue lecture ─────────────────────────────────────────────────────────── */
+.pf-info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.pf-info-full { grid-column: 1 / -1; }
+
+.pf-info-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--pf-text-muted);
+  margin-bottom: 3px;
+}
+
+.pf-info-val {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--pf-text-primary);
+}
+
+/* ── Box contact notification ────────────────────────────────────────────── */
+.pf-notif-box {
+  background: var(--pf-accent-light);
+  border: 1.5px solid var(--pf-input-border);
+  border-radius: 14px;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.pf-notif-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: #dbeafe;
+  border: 1.5px solid rgba(59, 130, 246, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.pf-notif-icon i {
+  color: var(--pf-accent);
+  font-size: 16px;
+}
+
+/* ── Divider ─────────────────────────────────────────────────────────────── */
+.pf-divider {
+  height: 1px;
+  background: var(--pf-card-border);
+  margin: 20px 0;
+}
+
+/* ── Modal ───────────────────────────────────────────────────────────────── */
+.pf-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(30, 58, 138, 0.45);
+  backdrop-filter: blur(6px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pf-modal {
+  background: var(--pf-white);
+  border-radius: 22px;
+  padding: 30px 28px;
+  width: 380px;
+  max-width: 92vw;
+  box-shadow: 0 20px 60px rgba(30, 58, 138, 0.15);
+}
+
+.pf-modal-title {
+  font-family: var(--pf-font-display);
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--pf-text-primary);
+  margin: 0 0 6px;
+}
+
+.pf-modal-sub {
+  font-size: 12px;
+  color: var(--pf-text-muted);
+  margin: 0 0 20px;
+}
+
+/* ── Spinner ─────────────────────────────────────────────────────────────── */
+.pf-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(240, 249, 255, 0.3);
+  border-top-color: var(--pf-text-light);
+  border-radius: 50%;
+  animation: pf-spin 0.7s linear infinite;
+}
+
+@keyframes pf-spin {
+  to { transform: rotate(360deg); }
+}

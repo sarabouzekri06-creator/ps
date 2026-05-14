@@ -8,6 +8,7 @@ use App\Models\MediTake;
 use App\Models\MedicationTakeLog;
 use App\Models\Measure;
 use App\Models\MeasureResult;
+use App\Services\PushNotificationService;
 use Illuminate\Support\Facades\Auth;
 
 class DashboardController extends Controller
@@ -18,19 +19,16 @@ class DashboardController extends Controller
         $userId = Auth::id();
         $date   = $request->get('date', now()->toDateString());
 
-        // ── Médicaments ──────────────────────────────────────────────────
         $medications = Medication::with(['takes', 'notification'])
             ->where('user_id', $userId)
             ->where('is_active', true)
             ->get()
             ->map(function ($med) use ($date, $userId) {
-
                 $takes = $med->takes->map(function ($take) use ($date, $userId) {
                     $log = MedicationTakeLog::where('take_id', $take->id)
                         ->where('user_id', $userId)
                         ->whereDate('taken_at', $date)
                         ->first();
-
                     return [
                         'id'        => $take->id,
                         'take_time' => $take->take_time,
@@ -40,7 +38,6 @@ class DashboardController extends Controller
                         'status'    => $log ? 'done' : 'pending',
                     ];
                 });
-
                 return [
                     'id'              => $med->id,
                     'medication_name' => $med->medication_name,
@@ -57,25 +54,20 @@ class DashboardController extends Controller
                 ];
             });
 
-        // ── Mesures ──────────────────────────────────────────────────────
         $measures = Measure::with(['takes', 'notification', 'history'])
             ->where('user_id', $userId)
             ->get()
             ->map(function ($mes) use ($date) {
-
-                // Vérifier si une valeur a été saisie ce jour
                 $dateShort   = \Carbon\Carbon::parse($date)->format('d/m');
                 $hasMeasured = $mes->history
                     ->filter(fn($h) => \Carbon\Carbon::parse($h->created_at)->format('d/m') === $dateShort)
                     ->isNotEmpty();
-
                 $takes = $mes->takes->map(fn($take) => [
                     'id'        => $take->id,
                     'take_time' => $take->take_time,
                     'label'     => $take->label,
                     'status'    => $hasMeasured ? 'done' : 'pending',
                 ]);
-
                 return [
                     'id'             => $mes->id,
                     'disease_name'   => $mes->disease_name,
@@ -130,6 +122,27 @@ class DashboardController extends Controller
 
             if ($take->medication) {
                 $take->medication->decrement('current_stock', $take->dose ?? 1);
+
+                // ── Notif : prise confirmée ──────────────────────────────
+                app(PushNotificationService::class)->sendToPatient(
+                    patientId: $userId,
+                    title:     '✅ Prise confirmée',
+                    body:      "Vous avez pris : {$take->medication->medication_name}",
+                    url:       '/medicaments'
+                );
+
+                // ── Notif : stock faible ─────────────────────────────────
+                $stockRestant = $take->medication->current_stock - ($take->dose ?? 1);
+                $alertStock   = $take->medication->low_stock_alert ?? 5;
+
+                if ($stockRestant <= $alertStock) {
+                    app(PushNotificationService::class)->sendToPatient(
+                        patientId: $userId,
+                        title:     '⚠️ Stock faible',
+                        body:      "Il reste seulement {$stockRestant} unité(s) de {$take->medication->medication_name}",
+                        url:       '/medicaments'
+                    );
+                }
             }
 
             return response()->json([
@@ -146,14 +159,41 @@ class DashboardController extends Controller
     public function markMeasureAsDone(Request $request, $id)
     {
         try {
-            $measure = Measure::where('user_id', Auth::id())
-                ->findOrFail($id);
+            $userId  = Auth::id();
+            $measure = Measure::where('user_id', $userId)->findOrFail($id);
 
             MeasureResult::create([
                 'measure_id' => $measure->id,
                 'value'      => $request->value ?? 0,
                 'note'       => $request->note  ?? null,
             ]);
+
+            // ── Notif : mesure enregistrée ───────────────────────────────
+            app(PushNotificationService::class)->sendToPatient(
+                patientId: $userId,
+                title:     '📊 Mesure enregistrée',
+                body:      "Votre {$measure->disease_name} : {$request->value} {$measure->unit}",
+                url:       '/mesures'
+            );
+
+            // ── Notif : valeur hors cible ────────────────────────────────
+            if ($measure->max_target && $request->value > $measure->max_target) {
+                app(PushNotificationService::class)->sendToPatient(
+                    patientId: $userId,
+                    title:     '🚨 Valeur trop élevée',
+                    body:      "{$measure->disease_name} : {$request->value} {$measure->unit} dépasse le seuil max ({$measure->max_target})",
+                    url:       '/mesures'
+                );
+            }
+
+            if ($measure->min_target && $request->value < $measure->min_target) {
+                app(PushNotificationService::class)->sendToPatient(
+                    patientId: $userId,
+                    title:     '🚨 Valeur trop basse',
+                    body:      "{$measure->disease_name} : {$request->value} {$measure->unit} est sous le seuil min ({$measure->min_target})",
+                    url:       '/mesures'
+                );
+            }
 
             return response()->json(['success' => true, 'message' => 'Mesure enregistrée']);
 

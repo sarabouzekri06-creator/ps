@@ -32,7 +32,7 @@ const offsetToDateStr = (offset) => {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 };
 
-const todayStr = offsetToDateStr(0);
+const todayStr   = offsetToDateStr(0);
 const ALL_OFFSETS = [0, -1, -2, -3];
 
 const dateLabel = (offset) => {
@@ -42,15 +42,48 @@ const dateLabel = (offset) => {
   return d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
 };
 
+// ✅ shouldTakeOnDate corrigé pour quarterly / every2months
 const shouldTakeOnDate = (entity, dateStr) => {
-  const date    = new Date(dateStr + 'T00:00:00');
-  const JOURS   = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
-  const jourNom = JOURS[date.getDay()];
+  const date       = new Date(dateStr + 'T00:00:00');
+  const JOURS      = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+  const jourNom    = JOURS[date.getDay()];
+  const dayOfMonth = date.getDate();
+  const month      = date.getMonth(); // 0-11
+
+  // frequency_days peut être un objet { day: 15 } ou un tableau ['Lun','Mer']
+  const fd        = entity.frequency_days ?? {};
+  const targetDay = fd?.day ?? 1;
+
+  // Mois de départ pour calculer le cycle trimestriel / bimestriel
+  const startMonth = entity.start_day
+    ? new Date(entity.start_day + 'T00:00:00').getMonth()
+    : 0;
+
   switch (entity.frequency_type) {
-    case 'daily':   return true;
-    case 'weekly':  return Array.isArray(entity.frequency_days) && entity.frequency_days.includes(jourNom);
-    case 'monthly': return date.getDate() === (entity.frequency_days?.day ?? 1);
-    default:        return true;
+    case 'daily':
+      return true;
+
+    case 'weekly':
+      return Array.isArray(fd)
+        ? fd.includes(jourNom)
+        : Array.isArray(entity.frequency_days) && entity.frequency_days.includes(jourNom);
+
+    case 'monthly':
+      return dayOfMonth === targetDay;
+
+    case 'every2months':
+      // Même jour, tous les 2 mois depuis startMonth
+      return dayOfMonth === targetDay &&
+             ((month - startMonth) % 2 + 2) % 2 === 0;
+
+    case 'quarterly':
+      // Même jour, tous les 3 mois depuis startMonth
+      // Ex: start Jan → affiche Jan/Avr/Juil/Oct uniquement
+      return dayOfMonth === targetDay &&
+             ((month - startMonth) % 3 + 3) % 3 === 0;
+
+    default:
+      return true;
   }
 };
 
@@ -64,12 +97,12 @@ const measureColor = (severity) => {
 };
 
 const Notification = () => {
-  const [dateCache,    setDateCache]    = useState({});
-  const [loadingSet,   setLoadingSet]   = useState(new Set());
-  const [saisieModal,  setSaisieModal]  = useState(null); // { itemId, name, unit }
-  const [saisieValue,  setSaisieValue]  = useState('');
-  const [saisieNote,   setSaisieNote]   = useState('');
-  const [saving,       setSaving]       = useState(false);
+  const [dateCache,   setDateCache]   = useState({});
+  const [loadingSet,  setLoadingSet]  = useState(new Set());
+  const [saisieModal, setSaisieModal] = useState(null);
+  const [saisieValue, setSaisieValue] = useState('');
+  const [saisieNote,  setSaisieNote]  = useState('');
+  const [saving,      setSaving]      = useState(false);
   const [, tick] = useState(0);
 
   useEffect(() => {
@@ -77,7 +110,7 @@ const Notification = () => {
     return () => clearInterval(t);
   }, []);
 
-  // ── Fetch ────────────────────────────────────────────────────────────
+  // ── Fetch ─────────────────────────────────────────────────────────────
   const fetchForDate = useCallback(async (dateStr, force = false) => {
     if (!force && dateCache[dateStr]) return;
     setLoadingSet(p => new Set([...p, dateStr]));
@@ -96,22 +129,27 @@ const Notification = () => {
     ALL_OFFSETS.forEach(offset => fetchForDate(offsetToDateStr(offset), offset === 0));
   }, []);
 
-  // ── Marquer médicament comme pris ────────────────────────────────────
+  // ✅ Recharge tous les jours du cache
+  const refreshAll = useCallback(() => {
+    ALL_OFFSETS.forEach(offset => fetchForDate(offsetToDateStr(offset), true));
+  }, [fetchForDate]);
+
+  // ── Marquer médicament comme pris ─────────────────────────────────────
   const markMedDone = async (takeId) => {
     try {
       await axios.post(`${BASE}/api/takes/${takeId}/done`, {}, { headers: hdrs() });
     } catch (e) { console.error(e); }
-    fetchForDate(todayStr, true);
+    refreshAll(); // ✅ recharge tout l'historique
   };
 
-  // ── Ouvrir modal saisie mesure ────────────────────────────────────────
+  // ── Ouvrir modal saisie mesure ─────────────────────────────────────────
   const openSaisie = (notif) => {
     setSaisieModal({ itemId: notif.itemId, name: notif.name, unit: notif.unit });
     setSaisieValue('');
     setSaisieNote('');
   };
 
-  // ── Sauvegarder la valeur mesure ──────────────────────────────────────
+  // ── Sauvegarder la valeur mesure ───────────────────────────────────────
   const saveMeasure = async () => {
     if (!saisieValue.trim()) return;
     setSaving(true);
@@ -122,7 +160,7 @@ const Notification = () => {
         note:       saisieNote,
       }, { headers: hdrs() });
       setSaisieModal(null);
-      fetchForDate(todayStr, true);
+      refreshAll(); // ✅ recharge tout l'historique
     } catch (e) {
       console.error(e);
       alert('Erreur lors de la saisie');
@@ -131,7 +169,7 @@ const Notification = () => {
     }
   };
 
-  // ── Construire les items d'un jour ────────────────────────────────────
+  // ── Construire les items d'un jour ─────────────────────────────────────
   const buildItems = (data, dateStr, isToday) => {
     if (!data) return [];
     const items = [];
@@ -159,16 +197,27 @@ const Notification = () => {
         });
       });
 
-    // Mesures
+    // ✅ Mesures — on passe start_day + frequency_days depuis les données API
     (data.measures ?? [])
-      .filter(mes => shouldTakeOnDate(mes, dateStr))
+      .filter(mes => shouldTakeOnDate({
+        frequency_type: mes.frequency_type,
+        frequency_days: mes.frequency_days, // { day: 15 } ou ['Lun']
+        start_day:      mes.start_day,      // ✅ pour calculer le cycle
+      }, dateStr))
       .forEach(mes => {
         (mes.takes ?? []).forEach(take => {
-          const time      = (take.take_time ?? '00:00').substring(0, 5);
-          const dateShort = new Date(dateStr).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
-          const isDone    = (mes.history ?? []).some(h => h.day === dateShort);
-          const isLate    = !isDone && (!isToday || isPast(time));
+          const time = (take.take_time ?? '00:00').substring(0, 5);
+
+          // ✅ isDone — accepte les deux formats de date (dd/mm et YYYY-MM-DD)
+          const dateShort = new Date(dateStr + 'T00:00:00').toLocaleDateString('fr-FR', {
+            day: '2-digit', month: '2-digit',
+          });
+          const isDone = (mes.history ?? []).some(h =>
+            h.day === dateShort || h.day === dateStr
+          );
+          const isLate = !isDone && (!isToday || isPast(time));
           if (isToday && isDone) return;
+
           items.push({
             id:      `mes-${take.id ?? mes.id}-${time}-${dateStr}`,
             takeId:  take.id,
@@ -177,7 +226,7 @@ const Notification = () => {
             name:    mes.disease_name,
             unit:    mes.unit ?? '',
             subtext: `${take.label ?? 'Mesure'}${mes.unit ? ' · ' + mes.unit : ''} · ${
-              mes.severity === 'High' ? 'Sévère' :
+              mes.severity === 'High'     ? 'Sévère'  :
               mes.severity === 'Moderate' ? 'Modérée' : 'Légère'
             }`,
             time, color: measureColor(mes.severity),
@@ -190,7 +239,7 @@ const Notification = () => {
     return items.sort((a, b) => a.time.localeCompare(b.time));
   };
 
-  // ── Groupes ───────────────────────────────────────────────────────────
+  // ── Groupes ────────────────────────────────────────────────────────────
   const groups = ALL_OFFSETS.map(offset => {
     const dateStr  = offsetToDateStr(offset);
     const isToday  = offset === 0;
@@ -383,6 +432,7 @@ const NfCard = ({ notif, idx, isToday, isPastDay, onMedDone, onMeasureSaisie }) 
 
   return (
     <div
+      id={`nf-card-${notif.id}`}
       className={`nf-card ${notif.isLate && !notif.isDone ? 'nf-card-late' : ''} ${notif.isDone ? 'nf-card-done' : ''}`}
       style={{ animationDelay: `${idx * 40}ms` }}
     >
@@ -390,7 +440,6 @@ const NfCard = ({ notif, idx, isToday, isPastDay, onMedDone, onMeasureSaisie }) 
         <span className="nf-dot" style={{ background: notif.isLate ? '#e74a3b' : notif.color }} />
       )}
 
-      {/* Icône */}
       <div className="nf-icon" style={{ background: `${notif.color}20` }}>
         {imgUrl ? (
           <>
@@ -403,7 +452,6 @@ const NfCard = ({ notif, idx, isToday, isPastDay, onMedDone, onMeasureSaisie }) 
         )}
       </div>
 
-      {/* Contenu */}
       <div className="nf-content">
         <div className="nf-row">
           <span className="nf-name">{notif.name}</span>
@@ -434,10 +482,8 @@ const NfCard = ({ notif, idx, isToday, isPastDay, onMedDone, onMeasureSaisie }) 
                 </button>
               )}
               <span className="nf-sep">·</span>
-              {/* Plus tard — masque la carte jusqu'au prochain rechargement */}
               <button className="nf-btn-skip"
                 onClick={() => {
-                  // On retire visuellement l'item du cache local sans appel API
                   const el = document.getElementById(`nf-card-${notif.id}`);
                   if (el) el.style.display = 'none';
                 }}>

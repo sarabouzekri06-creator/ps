@@ -2,83 +2,122 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Utilisateur; // AJOUTE CETTE LIGNE
+use App\Models\Utilisateur;
+use App\Models\ResponsablePatient;
+use App\Services\PushNotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 
 class AuthController extends Controller
 {
-    public function register(Request $request) {
+    // ── INSCRIPTION ──────────────────────────────────────────────
+    public function register(Request $request)
+    {
         $fields = $request->validate([
-            'email' => 'required|string|unique:users,email',
-            'password' => 'required|string|confirmed'
+            'email'    => 'required|string|unique:utilisateurs,email', // ← corrigé
+            'password' => 'required|string|confirmed',
         ]);
 
-        // Utilise le nom exact du modèle : Utilisateur
-      $user = Utilisateur::create([
-    'email' => $fields['email'],
-    'password' => Hash::make($fields['password']), // Utilisation de Hash::make
-    'is_profile_complete' => false
-]);
+        $user = Utilisateur::create([
+            'email'               => $fields['email'],
+            'password'            => Hash::make($fields['password']),
+            'is_profile_complete' => false,
+        ]);
 
         $token = $user->createToken('myapptoken')->plainTextToken;
 
         return response(['user' => $user, 'token' => $token], 201);
     }
 
-    // N'oublie pas d'ajouter la fonction login sinon ta route api.php plantera
-   public function login(Request $request) {
-    $fields = $request->validate([
-        'email' => 'required|string',
-        'password' => 'required|string'
-    ]);
+    // ── CONNEXION ─────────────────────────────────────────────────
+    public function login(Request $request)
+    {
+        $fields = $request->validate([
+            'email'    => 'required|string',
+            'password' => 'required|string',
+        ]);
 
-    // Tentative de connexion
-    if (!Auth::attempt($fields)) {
-        return response(['message' => 'Identifiants incorrects'], 401);
-    }
-
-    $user = Auth::user();
-    $token = $user->createToken('myapptoken')->plainTextToken;
-
-    return response(['user' => $user, 'token' => $token], 200);
-}
-public function updateProfile(Request $request) {
-    try {
-        $user = $request->user();
-
-        // 1. On initialise $path avec la valeur actuelle pour éviter l'erreur "Undefined variable"
-        // On récupère l'image déjà existante si aucune nouvelle n'est envoyée
-        $path = $user->profile_image;
-
-        // 2. Gestion de la nouvelle image
-        if ($request->hasFile('image')) {
-            $path = $request->file('image')->store('profiles', 'public');
-            // Optionnel : tu peux supprimer l'ancienne image ici si tu veux gagner de l'espace
+        if (!Auth::attempt($fields)) {
+            return response(['message' => 'Identifiants incorrects'], 401);
         }
 
-        // 3. Mise à jour globale
-        // ATTENTION : Vérifie bien si ta colonne s'appelle 'profile_image' ou 'profil_image'
-        $user->update([
-            'nom' => $request->nom,
-            'prenom' => $request->prenom,
-            'age' => $request->age,
-            'maladies' => $request->maladies,
-            'profile_image' => $path, // Utilisation de la variable sécurisée
-            'notification_type' => $request->notificationType,
-            'contact_alerte_email' => $request->contactAlerte,
-            'is_profile_complete' => true,
-        ]);
+        $user  = Auth::user();
+        $token = $user->createToken('myapptoken')->plainTextToken;
+
+        return response(['user' => $user, 'token' => $token], 200);
+    }
+
+    // ── DÉCONNEXION ───────────────────────────────────────────────
+    public function logout(Request $request)
+    {
+        $request->user()->currentAccessToken()->delete();
+        return response()->json(['message' => 'Déconnecté avec succès']);
+    }
+
+    // ── PROFIL CONNECTÉ ───────────────────────────────────────────
+    public function me(Request $request)
+    {
+        $user = $request->user();
+
+        // Charger aussi les responsables si c'est un responsable
+        $responsables = ResponsablePatient::where('patient_id', $user->id)
+                                           ->orderBy('ordre')
+                                           ->get();
 
         return response()->json([
-            'message' => 'Profil mis à jour avec succès !',
-            'user' => $user->fresh(), // .fresh() pour récupérer les données à jour
-            'image_url' => $path ? asset('storage/' . $path) : null
+            'user'         => $user,
+            'responsables' => $responsables,
         ]);
-
-    } catch (\Exception $e) {
-        return response()->json(['error' => $e->getMessage()], 500);
     }
-}
+
+    // ── MISE À JOUR DU PROFIL ─────────────────────────────────────
+    public function updateProfile(Request $request)
+    {
+        try {
+            $user = $request->user();
+            $path = $user->profile_image;
+
+            if ($request->hasFile('image')) {
+                // Supprimer l'ancienne image
+                if ($path) Storage::disk('public')->delete($path);
+                $path = $request->file('image')->store('profiles', 'public');
+            }
+
+            $user->update([
+                'nom'                  => $request->nom,
+                'prenom'               => $request->prenom,
+                'age'                  => $request->age,
+                'maladies'             => $request->maladies,
+                'profile_image'        => $path,
+                'notification_type'    => $request->notificationType,
+                'contact_alerte_email' => $request->contactAlerte,
+                'is_profile_complete'  => true,
+            ]);
+
+            // Si c'est un responsable → sauvegarder son email dans responsables_patient
+            if ($request->notificationType === 'responsable' && $request->contactAlerte) {
+                ResponsablePatient::updateOrCreate(
+                    [
+                        'patient_id' => $user->id,
+                        'ordre'      => 1,
+                    ],
+                    [
+                        'email_responsable' => $request->contactAlerte,
+                        'is_active'         => true,
+                    ]
+                );
+            }
+
+            return response()->json([
+                'message'   => 'Profil mis à jour avec succès !',
+                'user'      => $user->fresh(),
+                'image_url' => $path ? asset('storage/' . $path) : null,
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
 }

@@ -3,50 +3,57 @@ import './App.css';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 
-import Acceuil         from './component/acceuil';
-import Dashboard       from './component/dash';
-import Insc            from './component/insc';
-import Login           from './component/login';
-import Navbar          from './component/navbar';
-import Profile         from './component/profil';
-import Medicament      from './component/medicament';
-import Notification    from './component/notification';
-import Mesure          from './component/mesure';
-import MedicationList  from './component/listmedi';
-import MesureDashboard from './component/dashMesur/afficheMesure';
-import Type            from './component/type';
-import EditMedication  from './component/editmadicament';
-import EditMesure      from './component/editMesure';
+// Pages racine
+import Acceuil              from './component/acceuil';
+import Login                from './component/login';
+import Insc                 from './component/insc';
+import Info                 from './component/info';
+import GlobalReminderToast  from './component/GlobalReminderToast';
 
-// ✅ Système de notifications globales
-import GlobalReminderToast from './component/GlobalReminderToast';
+// Medicament
+import Medicament           from './component/medicament/medicament';
+import EditMedication       from './component/medicament/editmadicament';
+import Dashboard            from './component/medicament/dash';
+
+// Mesure
+import Mesure               from './component/mesure/mesure';
+import EditMesure           from './component/mesure/editMesure';
+
+// Lists (switcher)
+import HealthDashboard      from './component/list/switchDash';
+
+// Dashboard mesure
+import MesureDashboard      from './component/dashMesur/afficheMesure';
+
+// Notification
+import Notification         from './component/notification';
+
+import Navbar from './component/navbar'; // ou le bon chemin
+import Profile         from './component/profil';
+import Type            from './component/type';
 
 function App() {
   return (
     <BrowserRouter>
-      {/* Toaster pour les alertes succès/erreur */}
       <Toaster position="top-right" reverseOrder={false} />
-
-      {/* ✅ Notifications globales — visible sur toutes les pages */}
       <GlobalReminderToast />
-
-      {/* Navbar visible partout */}
-      <Navbar />
-
+ <Navbar />
       <Routes>
-        <Route path='/acceuil'              element={<Acceuil />} />
-        <Route path='/login'                element={<Login />} />
-        <Route path='/inscrire'             element={<Insc />} />
-        <Route path='/dashboard'            element={<Dashboard />} />
+        <Route path='/'             element={<Acceuil />} />
+        <Route path='/login'               element={<Login />} />
+        <Route path='/inscrire'            element={<Insc />} />
+        <Route path='/info'                element={<Info />} />
+        <Route path='/dashboard'           element={<Dashboard />} />
+        <Route path='/Medicament'          element={<Medicament />} />
+        <Route path='/Medicament/:id/edit' element={<EditMedication />} />
+        <Route path='/Mesure'              element={<Mesure />} />
+        <Route path='/Mesure/:id/edit'     element={<EditMesure />} />
+        <Route path='/MedicationList'      element={<HealthDashboard />} />
+        <Route path='/MesureDashboard'     element={<MesureDashboard />} />
+        <Route path='/Notification'        element={<Notification />} />
+
         <Route path='/type'                 element={<Type />} />
         <Route path='/Profile'              element={<Profile />} />
-        <Route path='/medicament'           element={<Medicament />} />
-        <Route path='/MesureDashboard'      element={<MesureDashboard />} />
-        <Route path='/Mesure'               element={<Mesure />} />
-        <Route path='/MedicationList'       element={<MedicationList />} />
-        <Route path='/Notification'         element={<Notification />} />
-        <Route path='/Medicament/:id/edit'  element={<EditMedication />} />
-        <Route path='/Mesure/:id/edit'      element={<EditMesure />} />
       </Routes>
     </BrowserRouter>
   );

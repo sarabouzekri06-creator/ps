@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import axios from "axios";
 import { useNavigate } from "react-router-dom";
-import "./med.css";
+import "../med.css";
+import MesureService from '../services/mesureService';
 
 const Mesure = () => {
   const navigate = useNavigate();
@@ -13,12 +13,12 @@ const Mesure = () => {
     selectedDays:  [],
     dayOfMonth:    1,
     comment:       "",
-    unit:          "",       // ← nouveau
-    maxTarget:     "",       // ← nouveau
-    minTarget:     "",       // ← nouveau
+    unit:          "",
+    maxTarget:     "",
+    minTarget:     "",
   });
 
-  const [takes, setTakes]       = useState([{ take_time: "08:00", label: "Matin" }]);
+  const [takes, setTakes]           = useState([{ take_time: "08:00", label: "Matin" }]);
   const [submitting, setSubmitting] = useState(false);
 
   const handleChange = (e) => {
@@ -45,12 +45,11 @@ const Mesure = () => {
     e.preventDefault();
     if (!formData.diseaseName.trim()) return alert("Veuillez saisir le nom de la mesure.");
     setSubmitting(true);
-    const token = localStorage.getItem('token');
+
     const payload = { ...formData, takes };
+
     try {
-      await axios.post('http://127.0.0.1:8000/api/measures', payload, {
-        headers: { Authorization: `Bearer ${token}`, Accept: 'application/json', 'Content-Type': 'application/json' }
-      });
+      await MesureService.create(payload);
       alert("Mesure configurée avec succès !");
       navigate('/MedicationList');
     } catch (error) {
@@ -73,7 +72,7 @@ const Mesure = () => {
         <div className="col-12 col-xl-10">
           <div className="card med-card border-0 shadow-lg rounded-4 overflow-hidden">
 
-            {/* ── Header ── */}
+            {/* Header */}
             <div className="med-card-header">
               <button type="button" className="med-back-btn" onClick={() => navigate(-1)}>
                 <i className="bi bi-chevron-left"></i>
@@ -84,7 +83,7 @@ const Mesure = () => {
             <form onSubmit={handleSubmit} className="card-body p-4 p-md-5 bg-white">
               <div className="row g-5">
 
-                {/* ── COLONNE GAUCHE ── */}
+                {/* COLONNE GAUCHE */}
                 <div className="col-md-6">
 
                   {/* Nom */}
@@ -102,47 +101,47 @@ const Mesure = () => {
                   </div>
 
                   {/* Unité */}
-<div className="mb-4">
-    <label className="form-label fw-bold text-secondary small">UNITÉ</label>
-    <input
-        type="text"
-        name="unit"
-        className="form-control form-control-lg bg-light border-0"
-        placeholder="Ex: mmHg, g/L, kg..."
-        value={formData.unit}
-        onChange={handleChange}
-    />
-</div>
+                  <div className="mb-4">
+                    <label className="form-label fw-bold text-secondary small">UNITÉ</label>
+                    <input
+                      type="text"
+                      name="unit"
+                      className="form-control form-control-lg bg-light border-0"
+                      placeholder="Ex: mmHg, g/L, kg..."
+                      value={formData.unit}
+                      onChange={handleChange}
+                    />
+                  </div>
 
-{/* Valeurs cibles */}
-<div className="mb-4">
-    <label className="form-label fw-bold text-secondary small">VALEURS CIBLES (ALERTES)</label>
-    <div className="d-flex gap-2">
-        <div className="flex-grow-1">
-            <label className="form-label small text-muted mb-1">Valeur max</label>
-            <input
-                type="number"
-                name="maxTarget"
-                className="form-control bg-light border-0"
-                placeholder="Ex: 14"
-                value={formData.maxTarget}
-                onChange={handleChange}
-            />
-        </div>
-        <div className="flex-grow-1">
-            <label className="form-label small text-muted mb-1">Valeur min</label>
-            <input
-                type="number"
-                name="minTarget"
-                className="form-control bg-light border-0"
-                placeholder="Ex: 8"
-                value={formData.minTarget}
-                onChange={handleChange}
-            />
-        </div>
-    </div>
-    <small className="text-muted">Une alerte s'affichera si la valeur dépasse ces seuils.</small>
-</div>
+                  {/* Valeurs cibles */}
+                  <div className="mb-4">
+                    <label className="form-label fw-bold text-secondary small">VALEURS CIBLES (ALERTES)</label>
+                    <div className="d-flex gap-2">
+                      <div className="flex-grow-1">
+                        <label className="form-label small text-muted mb-1">Valeur max</label>
+                        <input
+                          type="number"
+                          name="maxTarget"
+                          className="form-control bg-light border-0"
+                          placeholder="Ex: 14"
+                          value={formData.maxTarget}
+                          onChange={handleChange}
+                        />
+                      </div>
+                      <div className="flex-grow-1">
+                        <label className="form-label small text-muted mb-1">Valeur min</label>
+                        <input
+                          type="number"
+                          name="minTarget"
+                          className="form-control bg-light border-0"
+                          placeholder="Ex: 8"
+                          value={formData.minTarget}
+                          onChange={handleChange}
+                        />
+                      </div>
+                    </div>
+                    <small className="text-muted">Une alerte s'affichera si la valeur dépasse ces seuils.</small>
+                  </div>
 
                   {/* Sévérité */}
                   <div className="mb-4">
@@ -196,22 +195,24 @@ const Mesure = () => {
                   ))}
                 </div>
 
-                {/* ── COLONNE DROITE ── */}
+                {/* COLONNE DROITE */}
                 <div className="col-md-6">
                   <div className="row g-3">
 
                     {/* Fréquence */}
                     <div className="col-12">
                       <label className="form-label fw-bold text-secondary small">FRÉQUENCE DU SUIVI</label>
-                      <select name="frequencyType" className="form-select bg-light border-0" value={formData.frequencyType} onChange={handleChange}>
+                      <select name="frequencyType" className="form-select bg-light border-0"
+                        value={formData.frequencyType} onChange={handleChange}>
                         <option value="daily">Chaque jour</option>
                         <option value="weekly">Jours spécifiques</option>
                         <option value="monthly">Une fois par mois</option>
-                        <option value="every2months">Tous les 2 mois</option>  
-                        <option value="quarterly">Tous les 3 mois</option>  
+                        <option value="every2months">Tous les 2 mois</option>
+                        <option value="quarterly">Tous les 3 mois</option>
                       </select>
                     </div>
 
+                    {/* Jours spécifiques */}
                     {formData.frequencyType === 'weekly' && (
                       <div className="col-12 py-2">
                         <div className="d-flex flex-wrap gap-2">
@@ -225,60 +226,49 @@ const Mesure = () => {
                       </div>
                     )}
 
-                  {formData.frequencyType === 'monthly' && (
-    <div className="col-12">
-        <label className="form-label fw-bold text-secondary small">JOUR DE LA MESURE</label>
-        <input
-            type="number"
-            name="dayOfMonth"
-            className="form-control bg-light border-0 text-center"
-            min="1" max="31"
-            value={formData.dayOfMonth}
-            onChange={handleChange}
-            placeholder="Ex: 15"
-        />
-        <small className="text-muted">La mesure sera faite ce jour, chaque mois.</small>
-    </div>
-)}
-
-{(formData.frequencyType === 'every2months' || formData.frequencyType === 'quarterly') && (
-    <div className="col-12">
-        <label className="form-label fw-bold text-secondary small">JOUR DE LA MESURE</label>
-        <input
-            type="number"
-            name="dayOfMonth"
-            className="form-control bg-light border-0 text-center"
-            min="1" max="31"
-            value={formData.dayOfMonth}
-            onChange={handleChange}
-            placeholder="Ex: 15"
-        />
-        <small className="text-muted">
-            {formData.frequencyType === 'every2months'
-                ? 'La mesure sera faite ce jour, tous les 2 mois.'
-                : 'La mesure sera faite ce jour, tous les 3 mois.'}
-        </small>
-    </div>
-)}
-
-                  
-
-                    {/* Number of days */}
-                   
+                    {/* Jour du mois */}
+                    {(formData.frequencyType === 'monthly' ||
+                      formData.frequencyType === 'every2months' ||
+                      formData.frequencyType === 'quarterly') && (
+                      <div className="col-12">
+                        <label className="form-label fw-bold text-secondary small">JOUR DE LA MESURE</label>
+                        <input
+                          type="number"
+                          name="dayOfMonth"
+                          className="form-control bg-light border-0 text-center"
+                          min="1" max="31"
+                          value={formData.dayOfMonth}
+                          onChange={handleChange}
+                          placeholder="Ex: 15"
+                        />
+                        <small className="text-muted">
+                          {formData.frequencyType === 'monthly'     && 'La mesure sera faite ce jour, chaque mois.'}
+                          {formData.frequencyType === 'every2months' && 'La mesure sera faite ce jour, tous les 2 mois.'}
+                          {formData.frequencyType === 'quarterly'    && 'La mesure sera faite ce jour, tous les 3 mois.'}
+                        </small>
+                      </div>
+                    )}
                   </div>
 
                   {/* Commentaire */}
                   <div className="mt-4">
                     <label className="form-label fw-bold text-secondary small">NOTES / COMMENTAIRES</label>
-                    <textarea name="comment" className="form-control bg-light border-0" rows="3"
-                      placeholder="Ajoutez une note..." value={formData.comment} onChange={handleChange}></textarea>
+                    <textarea
+                      name="comment"
+                      className="form-control bg-light border-0"
+                      rows="3"
+                      placeholder="Ajoutez une note..."
+                      value={formData.comment}
+                      onChange={handleChange}
+                    />
                   </div>
                 </div>
               </div>
 
               {/* Save */}
               <div className="text-center mt-5">
-                <button type="submit" className="btn btn-primary px-5 py-3 rounded-pill fw-bold shadow-lg" disabled={submitting}>
+                <button type="submit" className="btn btn-primary px-5 py-3 rounded-pill fw-bold shadow-lg"
+                  disabled={submitting}>
                   {submitting
                     ? <><span className="spinner-border spinner-border-sm me-2"></span>Enregistrement...</>
                     : <><i className="bi bi-check-lg me-2"></i>Enregistrer la mesure</>

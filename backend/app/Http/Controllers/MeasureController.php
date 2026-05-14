@@ -113,10 +113,7 @@ class MeasureController extends Controller
                 $measure = Measure::where('user_id', auth()->id())
                     ->findOrFail($id);
 
-                // ── Mettre à jour la notification ──
                 if ($measure->notification_id) {
-
-                    // Calculer frequency_details selon le type
                     $freqDetails = null;
                     if ($request->frequency_type === 'weekly') {
                         $freqDetails = json_encode($request->frequency_details ?? []);
@@ -125,14 +122,13 @@ class MeasureController extends Controller
                     }
 
                     Notification::where('id', $measure->notification_id)->update([
-                        'start_day'         => now()->toDateString(), // automatique
-                        'number_of_days'    => 36500,                 // illimité
+                        'start_day'         => now()->toDateString(),
+                        'number_of_days'    => 36500,
                         'frequency_type'    => $request->frequency_type,
                         'frequency_details' => $freqDetails,
                     ]);
                 }
 
-                // ── Mettre à jour la mesure ──
                 $measure->update([
                     'disease_name' => $request->disease_name,
                     'severity'     => $request->severity,
@@ -142,18 +138,15 @@ class MeasureController extends Controller
                     'comment'      => $request->comment      ?? $measure->comment,
                 ]);
 
-                // ── Synchroniser les prises ──
                 $incomingIds = collect($request->takes)
                     ->pluck('id')
                     ->filter()
                     ->values();
 
-                // Supprimer les prises retirées
                 $measure->takes()
                     ->whereNotIn('id', $incomingIds)
                     ->delete();
 
-                // Mettre à jour ou créer
                 foreach ($request->takes as $take) {
                     if (!empty($take['id'])) {
                         MeasureTake::where('id', $take['id'])
@@ -232,9 +225,16 @@ class MeasureController extends Controller
             ->get()
             ->map(function ($measure) {
 
-                $unit      = $measure->unit       ?? '';
-                $maxTarget = $measure->max_target  ?? null;
-                $minTarget = $measure->min_target  ?? null;
+                $notif     = $measure->notification;
+                $unit      = $measure->unit      ?? '';
+                $maxTarget = $measure->max_target ?? null;
+                $minTarget = $measure->min_target ?? null;
+
+                // ✅ frequency_details décodé en tableau
+                $rawFd         = optional($notif)->frequency_details;
+                $frequencyDays = $rawFd
+                    ? (is_string($rawFd) ? json_decode($rawFd, true) : $rawFd)
+                    : null;
 
                 return [
                     'id'            => $measure->id,
@@ -242,10 +242,13 @@ class MeasureController extends Controller
                     'unit'          => $unit,
                     'maxTarget'     => $maxTarget ? (float) $maxTarget : null,
                     'minTarget'     => $minTarget ? (float) $minTarget : null,
-                    'frequencyType' => optional($measure->notification)->frequency_type,
+                    'frequencyType' => optional($notif)->frequency_type,
+                    'frequency_days' => $frequencyDays,        // ✅ { day: 15 } ou ['Lun','Mer']
+                    'start_day'     => optional($notif)->start_day, // ✅ pour calculer le cycle trimestriel
                     'color'         => $measure->color ?? '#3b5bdb',
                     'currentValue'  => optional($measure->history->last())->value ?? null,
                     'takes'         => $measure->takes->map(fn($t) => [
+                        'id'        => $t->id,
                         'take_time' => $t->take_time,
                         'label'     => $t->label,
                     ]),

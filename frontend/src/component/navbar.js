@@ -30,19 +30,19 @@ const Navbar = () => {
 
             <li className="nav-item ">
               <Link className="nav-link" to="/dashboard">
-                Dashboard
+                Dashboard medicament
               </Link>
             </li>
 
             <li className="nav-item">
               <Link className="nav-link" to="/MedicationList">
-                 Medicaments
+                 Medi & Mesu
               </Link>
             </li>
 
              <li className="nav-item">
               <Link className="nav-link" to="/MesureDashboard">
-                 Mesures
+                Dashboard mesures
               </Link>
             </li>
 

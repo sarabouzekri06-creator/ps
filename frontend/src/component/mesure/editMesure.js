@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import axios from "axios";
 import { useNavigate, useParams } from "react-router-dom";
-import "./med.css";
+import "../med.css";
+import MesureService from '../services/mesureService';
 
 const EditMesure = () => {
-  const { id }     = useParams();
-  const navigate   = useNavigate();
+  const { id }   = useParams();
+  const navigate = useNavigate();
 
   const [loading,    setLoading]    = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -26,10 +26,7 @@ const EditMesure = () => {
 
   // ── Charger la mesure existante ──
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    axios.get(`http://127.0.0.1:8000/api/measures/${id}`, {
-      headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
-    })
+    MesureService.getById(id)
       .then(({ data }) => {
         const m = data.data ?? data;
 
@@ -47,15 +44,15 @@ const EditMesure = () => {
         }
 
         setFormData({
-          diseaseName:   m.disease_name  ?? "",
-          severity:      m.severity      ?? "Moderate",
+          diseaseName:   m.disease_name   ?? "",
+          severity:      m.severity       ?? "Moderate",
           frequencyType: m.frequency_type ?? "daily",
           selectedDays,
           dayOfMonth,
-          comment:       m.comment       ?? "",
-          unit:          m.unit          ?? "",
-          maxTarget:     m.max_target    ?? "",
-          minTarget:     m.min_target    ?? "",
+          comment:   m.comment    ?? "",
+          unit:      m.unit       ?? "",
+          maxTarget: m.max_target ?? "",
+          minTarget: m.min_target ?? "",
         });
 
         setTakes(
@@ -98,14 +95,9 @@ const EditMesure = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.diseaseName.trim()) return alert("Veuillez saisir le nom de la mesure.");
-    if (takes.length === 0) return alert("Ajoutez au moins une heure de mesure.");
+    if (takes.length === 0)           return alert("Ajoutez au moins une heure de mesure.");
 
     setSubmitting(true);
-    const token = localStorage.getItem('token');
-
-    const freqDetails = formData.frequencyType === 'weekly'
-      ? formData.selectedDays
-      : { day: formData.dayOfMonth };
 
     const payload = {
       disease_name:      formData.diseaseName,
@@ -113,18 +105,18 @@ const EditMesure = () => {
       start_day:         new Date().toISOString().split('T')[0],
       number_of_days:    36500,
       frequency_type:    formData.frequencyType,
-      frequency_details: freqDetails,
-      comment:           formData.comment,
-      unit:              formData.unit,
-      max_target:        formData.maxTarget || null,
-      min_target:        formData.minTarget || null,
+      frequency_details: formData.frequencyType === 'weekly'
+                           ? formData.selectedDays
+                           : { day: formData.dayOfMonth },
+      comment:    formData.comment,
+      unit:       formData.unit,
+      max_target: formData.maxTarget || null,
+      min_target: formData.minTarget || null,
       takes,
     };
 
     try {
-      await axios.put(`http://127.0.0.1:8000/api/measures/${id}`, payload, {
-        headers: { Authorization: `Bearer ${token}`, Accept: 'application/json', 'Content-Type': 'application/json' },
-      });
+      await MesureService.update(id, payload);
       alert("Mesure mise à jour avec succès !");
       navigate('/MedicationList');
     } catch (error) {
@@ -156,7 +148,7 @@ const EditMesure = () => {
         <div className="col-12 col-xl-10">
           <div className="card med-card border-0 shadow-lg rounded-4 overflow-hidden">
 
-            {/* ── Header ── */}
+            {/* Header */}
             <div className="med-card-header">
               <button type="button" className="med-back-btn" onClick={() => navigate(-1)}>
                 <i className="bi bi-chevron-left"></i>
@@ -167,7 +159,7 @@ const EditMesure = () => {
             <form onSubmit={handleSubmit} className="card-body p-4 p-md-5 bg-white">
               <div className="row g-5">
 
-                {/* ── COLONNE GAUCHE ── */}
+                {/* COLONNE GAUCHE */}
                 <div className="col-md-6">
 
                   {/* Nom */}
@@ -244,7 +236,7 @@ const EditMesure = () => {
                     </div>
                   </div>
 
-                  {/* Heures des mesures */}
+                  {/* Heures */}
                   <div className="d-flex justify-content-between align-items-center mb-3">
                     <label className="fw-bold text-secondary small mb-0">HEURES DES MESURES</label>
                     <button type="button" className="btn btn-sm btn-primary rounded-pill shadow-sm" onClick={addTake}>
@@ -253,7 +245,8 @@ const EditMesure = () => {
                   </div>
 
                   {takes.length === 0 && (
-                    <div className="text-center py-3 text-muted small border rounded-3 mb-3" style={{ borderStyle: 'dashed' }}>
+                    <div className="text-center py-3 text-muted small border rounded-3 mb-3"
+                      style={{ borderStyle: 'dashed' }}>
                       Aucune heure ajoutée
                     </div>
                   )}
@@ -277,7 +270,8 @@ const EditMesure = () => {
                         />
                       </div>
                       {takes.length > 1 && (
-                        <button type="button" className="btn btn-link text-danger p-0 ms-2" onClick={() => removeTake(i)}>
+                        <button type="button" className="btn btn-link text-danger p-0 ms-2"
+                          onClick={() => removeTake(i)}>
                           <i className="bi bi-trash"></i>
                         </button>
                       )}
@@ -285,14 +279,15 @@ const EditMesure = () => {
                   ))}
                 </div>
 
-                {/* ── COLONNE DROITE ── */}
+                {/* COLONNE DROITE */}
                 <div className="col-md-6">
                   <div className="row g-3">
 
                     {/* Fréquence */}
                     <div className="col-12">
                       <label className="form-label fw-bold text-secondary small">FRÉQUENCE DU SUIVI</label>
-                      <select name="frequencyType" className="form-select bg-light border-0" value={formData.frequencyType} onChange={handleChange}>
+                      <select name="frequencyType" className="form-select bg-light border-0"
+                        value={formData.frequencyType} onChange={handleChange}>
                         <option value="daily">Chaque jour</option>
                         <option value="weekly">Jours spécifiques</option>
                         <option value="monthly">Une fois par mois</option>
@@ -315,25 +310,8 @@ const EditMesure = () => {
                       </div>
                     )}
 
-                    {/* Jour du mois — monthly */}
-                    {formData.frequencyType === 'monthly' && (
-                      <div className="col-12">
-                        <label className="form-label fw-bold text-secondary small">JOUR DE LA MESURE</label>
-                        <input
-                          type="number"
-                          name="dayOfMonth"
-                          className="form-control bg-light border-0 text-center"
-                          min="1" max="31"
-                          value={formData.dayOfMonth}
-                          onChange={handleChange}
-                          placeholder="Ex: 15"
-                        />
-                        <small className="text-muted">La mesure sera faite ce jour, chaque mois.</small>
-                      </div>
-                    )}
-
-                    {/* Jour du mois — every2months / quarterly */}
-                    {(formData.frequencyType === 'every2months' || formData.frequencyType === 'quarterly') && (
+                    {/* Jour du mois — monthly / every2months / quarterly */}
+                    {['monthly', 'every2months', 'quarterly'].includes(formData.frequencyType) && (
                       <div className="col-12">
                         <label className="form-label fw-bold text-secondary small">JOUR DE LA MESURE</label>
                         <input
@@ -346,9 +324,9 @@ const EditMesure = () => {
                           placeholder="Ex: 15"
                         />
                         <small className="text-muted">
-                          {formData.frequencyType === 'every2months'
-                            ? 'La mesure sera faite ce jour, tous les 2 mois.'
-                            : 'La mesure sera faite ce jour, tous les 3 mois.'}
+                          {formData.frequencyType === 'monthly'      && 'La mesure sera faite ce jour, chaque mois.'}
+                          {formData.frequencyType === 'every2months' && 'La mesure sera faite ce jour, tous les 2 mois.'}
+                          {formData.frequencyType === 'quarterly'    && 'La mesure sera faite ce jour, tous les 3 mois.'}
                         </small>
                       </div>
                     )}
@@ -357,15 +335,22 @@ const EditMesure = () => {
                   {/* Commentaire */}
                   <div className="mt-4">
                     <label className="form-label fw-bold text-secondary small">NOTES / COMMENTAIRES</label>
-                    <textarea name="comment" className="form-control bg-light border-0" rows="3"
-                      placeholder="Ajoutez une note..." value={formData.comment} onChange={handleChange}></textarea>
+                    <textarea
+                      name="comment"
+                      className="form-control bg-light border-0"
+                      rows="3"
+                      placeholder="Ajoutez une note..."
+                      value={formData.comment}
+                      onChange={handleChange}
+                    />
                   </div>
                 </div>
               </div>
 
               {/* Save */}
               <div className="text-center mt-5">
-                <button type="submit" className="btn btn-primary px-5 py-3 rounded-pill fw-bold shadow-lg" disabled={submitting}>
+                <button type="submit" className="btn btn-primary px-5 py-3 rounded-pill fw-bold shadow-lg"
+                  disabled={submitting}>
                   {submitting
                     ? <><span className="spinner-border spinner-border-sm me-2"></span>Enregistrement...</>
                     : <><i className="bi bi-check-lg me-2"></i>Mettre à jour la mesure</>

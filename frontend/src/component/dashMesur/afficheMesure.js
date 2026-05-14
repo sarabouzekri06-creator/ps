@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import axios from 'axios';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
+import MesureService from '../services/mesureService';
 
 import MesureChart from './MesureChart';
-
+import PdfModal from './pdfModel'; // ✅ import du composant séparé
 import {
     SaisieModal, DeleteModal,
     EditResultModal, DeleteResultModal,
@@ -11,14 +11,12 @@ import {
     getMeta,
 } from './model';
 
-const API = 'http://127.0.0.1:8000';
-const authHeaders = () => ({ Authorization: `Bearer ${localStorage.getItem('token')}` });
-
 const parseVal = (val) => {
     if (!val) return null;
     const str = String(val);
     return parseFloat(str.includes('/') ? str.split('/')[0] : str);
 };
+
 const chunkData = (arr, freq) => {
     let chunkSize;
     switch (freq?.label) {
@@ -33,7 +31,7 @@ const chunkData = (arr, freq) => {
     for (let i = 0; i < arr.length; i += chunkSize) chunks.push(arr.slice(i, i + chunkSize));
     return chunks;
 };
-// ─── Composant principal ──────────────────────────────────────────────────────
+
 const MesureDashboard = () => {
     const [mesuresData,       setMesuresData]       = useState([]);
     const [activeTab,         setActiveTab]         = useState(null);
@@ -46,6 +44,7 @@ const MesureDashboard = () => {
     const [deleteNoteModal,   setDeleteNoteModal]   = useState(null);
     const [openMenuIdx,       setOpenMenuIdx]       = useState(null);
     const [periodIndex,       setPeriodIndex]       = useState(0);
+    const [pdfModalOpen,      setPdfModalOpen]      = useState(false); // ✅
 
     useEffect(() => {
         const close = () => setOpenMenuIdx(null);
@@ -55,7 +54,7 @@ const MesureDashboard = () => {
 
     const fetchHealthData = useCallback(async () => {
         try {
-            const res = await axios.get(`${API}/api/measures/stats`, { headers: authHeaders() });
+            const res = await MesureService.getStats();
             setMesuresData(res.data);
             setActiveTab(prev => prev ?? (res.data[0]?.id ?? null));
         } catch (err) {
@@ -68,8 +67,6 @@ const MesureDashboard = () => {
 
     useEffect(() => { fetchHealthData(); }, [fetchHealthData]);
 
-  
-
     const refreshAndKeepTab = useCallback(async () => {
         const currentTab = activeTab;
         setActiveTab(null);
@@ -78,13 +75,13 @@ const MesureDashboard = () => {
     }, [activeTab, fetchHealthData]);
 
     const handleSave = useCallback(async (measureId, value, note) => {
-        await axios.post(`${API}/api/measures/result`, { measure_id: measureId, value, note }, { headers: authHeaders() });
+        await MesureService.saveResult(measureId, value, note);
         toast.success('Valeur enregistrée !');
         await refreshAndKeepTab();
     }, [refreshAndKeepTab]);
 
     const handleDelete = useCallback(async (measureId) => {
-        await axios.delete(`${API}/api/measures/${measureId}`, { headers: authHeaders() });
+        await MesureService.delete(measureId);
         toast.success('Mesure supprimée');
         setMesuresData(prev => {
             const remaining = prev.filter(m => m.id !== measureId);
@@ -94,41 +91,43 @@ const MesureDashboard = () => {
     }, []);
 
     const handleUpdateResult = useCallback(async (resultId, value, note) => {
-        await axios.put(`${API}/api/measures/results/${resultId}`, { value, note }, { headers: authHeaders() });
+        await MesureService.updateResult(resultId, value, note);
         toast.success('Valeur mise à jour !');
         await refreshAndKeepTab();
     }, [refreshAndKeepTab]);
 
     const handleDeleteResult = useCallback(async (resultId) => {
-        await axios.delete(`${API}/api/measures/results/${resultId}`, { headers: authHeaders() });
+        await MesureService.deleteResult(resultId);
         toast.success('Valeur supprimée');
         await refreshAndKeepTab();
     }, [refreshAndKeepTab]);
 
     const handleUpdateNote = useCallback(async (resultId, currentValeur, newNote) => {
-        await axios.put(`${API}/api/measures/results/${resultId}`, { value: currentValeur, note: newNote }, { headers: authHeaders() });
+        await MesureService.updateResult(resultId, currentValeur, newNote);
         toast.success('Note mise à jour !');
         await refreshAndKeepTab();
     }, [refreshAndKeepTab]);
 
     const handleDeleteNote = useCallback(async (resultId, currentValeur) => {
-        await axios.put(`${API}/api/measures/results/${resultId}`, { value: currentValeur, note: '' }, { headers: authHeaders() });
+        await MesureService.updateResult(resultId, currentValeur, '');
         toast.success('Note supprimée');
         await refreshAndKeepTab();
     }, [refreshAndKeepTab]);
 
     const selectedMesure = mesuresData.find(m => m.id === activeTab);
-    const allHistory     = useMemo(() =>
+
+    const allHistory = useMemo(() =>
         selectedMesure ? [...(selectedMesure.history || [])].reverse() : [],
     [selectedMesure]);
 
- const freqLabel = {
-    'daily':        { label: 'Quotidien',    icon: 'bi-calendar-day',   color: '#1cc88a' },
-    'weekly':       { label: 'Hebdomadaire', icon: 'bi-calendar-week',  color: '#4e73df' },
-    'monthly':      { label: 'Mensuel',      icon: 'bi-calendar-month', color: '#f6a935' },
-    'every2months': { label: 'Bimestriel',   icon: 'bi-calendar2',      color: '#e74a3b' }, // ← nouveau
-    'quarterly':    { label: 'Trimestriel',  icon: 'bi-calendar3',      color: '#6f42c1' }, // ← nouveau
-}[selectedMesure?.frequencyType] ?? null;
+    const freqLabel = {
+        'daily':        { label: 'Quotidien',    icon: 'bi-calendar-day',   color: '#1cc88a' },
+        'weekly':       { label: 'Hebdomadaire', icon: 'bi-calendar-week',  color: '#4e73df' },
+        'monthly':      { label: 'Mensuel',      icon: 'bi-calendar-month', color: '#f6a935' },
+        'every2months': { label: 'Bimestriel',   icon: 'bi-calendar2',      color: '#e74a3b' },
+        'quarterly':    { label: 'Trimestriel',  icon: 'bi-calendar3',      color: '#6f42c1' },
+    }[selectedMesure?.frequencyType] ?? null;
+
     const periods       = useMemo(() => chunkData(allHistory, freqLabel), [allHistory, freqLabel]);
     const safePeriodIdx = Math.min(periodIndex, Math.max(0, periods.length - 1));
     const chartData     = periods[safePeriodIdx] ?? [];
@@ -212,10 +211,21 @@ const MesureDashboard = () => {
                                 <i className="bi bi-plus-circle ms-2" />
                             </div>
                         )}
-                        <div className="bg-primary shadow-sm rounded-pill px-4 py-2 fw-bold text-white border">
-                            <i className="bi bi-calendar3 me-2" />
-                            {new Date().toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}
-                        </div>
+
+                        {/* ✅ Bouton PDF */}
+                        <button
+                            onClick={() => setPdfModalOpen(true)}
+                            className="d-inline-flex align-items-center gap-2 fw-bold"
+                            style={{
+                                border: 'none', borderRadius: 99, padding: '9px 20px',
+                                background: '#fff', color: '#ef4444', cursor: 'pointer',
+                                fontSize: 14, boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                            }}>
+                            <i className="bi bi-file-earmark-medical" style={{ fontSize: 16 }} />
+                            Exporter PDF
+                        </button>
+
+                        
                     </div>
                 </header>
 
@@ -230,7 +240,9 @@ const MesureDashboard = () => {
                             <strong>Valeur critique — {selectedMesure.name}</strong>
                             <p className="mb-0 small">
                                 Dernière valeur : <strong>{lastVal} {selectedMesure.unit}</strong> —
-                                {isAbove ? ` au-dessus du max (${selectedMesure.maxTarget})` : ` en-dessous du min (${selectedMesure.minTarget})`}.
+                                {isAbove
+                                    ? ` au-dessus du max (${selectedMesure.maxTarget})`
+                                    : ` en-dessous du min (${selectedMesure.minTarget})`}.
                             </p>
                         </div>
                     </div>
@@ -242,10 +254,14 @@ const MesureDashboard = () => {
                         const meta     = getMeta(m.name);
                         const isActive = activeTab === m.id;
                         const lastH    = (m.history || []).slice(-1)[0];
-                        const hasAlert = lastH && ((m.maxTarget && lastH.valeur > m.maxTarget) || (m.minTarget && lastH.valeur < m.minTarget));
+                        const hasAlert = lastH && (
+                            (m.maxTarget && lastH.valeur > m.maxTarget) ||
+                            (m.minTarget && lastH.valeur < m.minTarget)
+                        );
                         return (
                             <div key={m.id} className="position-relative flex-shrink-0">
-                                <button onClick={() => { setActiveTab(m.id); setPeriodIndex(0); }}
+                                <button
+                                    onClick={() => { setActiveTab(m.id); setPeriodIndex(0); }}
                                     className={`btn rounded-4 px-4 py-3 shadow-sm border-0 text-start ${isActive ? 'text-white' : 'bg-white text-dark'}`}
                                     style={{ minWidth: 180, background: isActive ? meta.color : undefined }}>
                                     <small className={`d-block mb-1 ${isActive ? 'opacity-75' : 'text-muted'}`}>Suivi de</small>
@@ -257,7 +273,8 @@ const MesureDashboard = () => {
                                         {m.currentValue ? `${m.currentValue} ${m.unit ?? ''}` : 'Aucune donnée'}
                                     </div>
                                 </button>
-                                <button className="position-absolute top-0 end-0 btn btn-sm p-0 d-flex align-items-center justify-content-center bg-white rounded-circle shadow-sm border-0"
+                                <button
+                                    className="position-absolute top-0 end-0 btn btn-sm p-0 d-flex align-items-center justify-content-center bg-white rounded-circle shadow-sm border-0"
                                     style={{ width: 20, height: 20, transform: 'translate(30%, -30%)', zIndex: 1 }}
                                     onClick={e => { e.stopPropagation(); setDeleteModal(m); }}>
                                     <i className="bi bi-x text-danger" style={{ fontSize: 11 }} />
@@ -267,7 +284,9 @@ const MesureDashboard = () => {
                     })}
                     <div className="card border-0 shadow-sm rounded-4 p-3 text-center flex-shrink-0 d-flex flex-column align-items-center justify-content-center"
                         style={{ minWidth: 110, cursor: 'pointer', background: `${accentColor}12` }}>
-                        <a href='/Mesure'><i className="bi bi-plus-circle fs-4 mb-1" style={{ color: accentColor }} /></a>
+                        <a href='/Mesure'>
+                            <i className="bi bi-plus-circle fs-4 mb-1" style={{ color: accentColor }} />
+                        </a>
                     </div>
                 </div>
 
@@ -276,13 +295,14 @@ const MesureDashboard = () => {
                         {/* STATS RAPIDES */}
                         <div className="row g-3 mb-4">
                             {[
-                                { label: 'Total mesures',    val: allHistory.length,   icon: 'bi-clipboard-data',    color: accentColor },
-                                { label: 'Alertes totales',  val: allAlertes.length,   icon: 'bi-exclamation-octagon', color: allAlertes.length > 0 ? '#e74a3b' : '#1cc88a' },
-                                { label: 'Dernière valeur',  val: `${lastVal ?? '—'} ${selectedMesure.unit ?? ''}`, icon: 'bi-activity', color: isAbove || isBelow ? '#e74a3b' : '#1cc88a' },
+                                { label: 'Total mesures',   val: allHistory.length,   icon: 'bi-clipboard-data',      color: accentColor },
+                                { label: 'Alertes totales', val: allAlertes.length,   icon: 'bi-exclamation-octagon', color: allAlertes.length > 0 ? '#e74a3b' : '#1cc88a' },
+                                { label: 'Dernière valeur', val: `${lastVal ?? '—'} ${selectedMesure.unit ?? ''}`, icon: 'bi-activity', color: isAbove || isBelow ? '#e74a3b' : '#1cc88a' },
                                 freqLabel ? { label: 'Fréquence', val: freqLabel.label, icon: freqLabel.icon, color: freqLabel.color } : null,
                             ].filter(Boolean).map((card, i) => (
                                 <div className="col-6 col-md-3" key={i}>
-                                    <div className="card border-0 shadow-sm rounded-4 p-3 h-100" style={{ borderLeft: `4px solid ${card.color}` }}>
+                                    <div className="card border-0 shadow-sm rounded-4 p-3 h-100"
+                                        style={{ borderLeft: `4px solid ${card.color}` }}>
                                         <div className="d-flex align-items-center gap-2 mb-1">
                                             <i className={`bi ${card.icon}`} style={{ color: card.color, fontSize: 14 }} />
                                             <small className="text-muted fw-bold text-uppercase" style={{ fontSize: '0.65rem' }}>{card.label}</small>
@@ -311,7 +331,8 @@ const MesureDashboard = () => {
                                     const isAlert = m.valeur > (selectedMesure.maxTarget ?? Infinity)
                                         || (selectedMesure.minTarget && m.valeur < selectedMesure.minTarget);
                                     return (
-                                        <div key={i} className="card border-0 shadow-sm rounded-4 p-3 text-center flex-shrink-0 position-relative"
+                                        <div key={i}
+                                            className="card border-0 shadow-sm rounded-4 p-3 text-center flex-shrink-0 position-relative"
                                             style={{ minWidth: 130, borderTop: `3px solid ${isAlert ? '#dc3545' : accentColor}`, overflow: 'visible' }}>
                                             <div className="position-absolute" style={{ top: 6, right: 6, zIndex: 10 }}>
                                                 <button className="btn btn-link text-muted p-0 border-0"
@@ -448,7 +469,9 @@ const MesureDashboard = () => {
                                             <div className={`rounded-3 p-2 mb-2 d-flex align-items-center gap-2 ${isAbove ? 'bg-danger' : 'bg-warning'} bg-opacity-25`}>
                                                 <i className={`bi ${isAbove ? 'bi-arrow-up-circle-fill text-danger' : 'bi-arrow-down-circle-fill text-warning'}`} />
                                                 <small className="fw-bold">
-                                                    {isAbove ? `Au-dessus du max (${selectedMesure.maxTarget})` : `En-dessous du min (${selectedMesure.minTarget})`}
+                                                    {isAbove
+                                                        ? `Au-dessus du max (${selectedMesure.maxTarget})`
+                                                        : `En-dessous du min (${selectedMesure.minTarget})`}
                                                 </small>
                                             </div>
                                         )}
@@ -467,12 +490,22 @@ const MesureDashboard = () => {
                 )}
             </div>
 
-            {saisieModal       && <SaisieModal       mesure={saisieModal}                    onClose={() => setSaisieModal(null)}       onSave={handleSave}           />}
-            {deleteModal       && <DeleteModal        mesure={deleteModal}                    onClose={() => setDeleteModal(null)}       onConfirm={handleDelete}      />}
-            {editResultModal   && <EditResultModal    result={editResultModal.result}   mesure={editResultModal.mesure}   onClose={() => setEditResultModal(null)}   onSave={handleUpdateResult}   />}
-            {deleteResultModal && <DeleteResultModal  result={deleteResultModal.result} mesure={deleteResultModal.mesure} onClose={() => setDeleteResultModal(null)} onConfirm={handleDeleteResult} />}
-            {editNoteModal     && <EditNoteModal      result={editNoteModal.result}     mesure={editNoteModal.mesure}     onClose={() => setEditNoteModal(null)}     onSave={handleUpdateNote}     />}
-            {deleteNoteModal   && <DeleteNoteModal    result={deleteNoteModal.result}   mesure={deleteNoteModal.mesure}   onClose={() => setDeleteNoteModal(null)}   onConfirm={handleDeleteNote}  />}
+            {/* MODALS */}
+            {saisieModal       && <SaisieModal        mesure={saisieModal}                    onClose={() => setSaisieModal(null)}       onSave={handleSave}            />}
+            {deleteModal       && <DeleteModal         mesure={deleteModal}                    onClose={() => setDeleteModal(null)}       onConfirm={handleDelete}       />}
+            {editResultModal   && <EditResultModal     result={editResultModal.result}   mesure={editResultModal.mesure}   onClose={() => setEditResultModal(null)}   onSave={handleUpdateResult}    />}
+            {deleteResultModal && <DeleteResultModal   result={deleteResultModal.result} mesure={deleteResultModal.mesure} onClose={() => setDeleteResultModal(null)} onConfirm={handleDeleteResult} />}
+            {editNoteModal     && <EditNoteModal       result={editNoteModal.result}     mesure={editNoteModal.mesure}     onClose={() => setEditNoteModal(null)}     onSave={handleUpdateNote}      />}
+            {deleteNoteModal   && <DeleteNoteModal     result={deleteNoteModal.result}   mesure={deleteNoteModal.mesure}   onClose={() => setDeleteNoteModal(null)}   onConfirm={handleDeleteNote}   />}
+
+            {/* ✅ Modal PDF */}
+            {pdfModalOpen && (
+                <PdfModal
+                    mesuresData={mesuresData}
+                    patientName="Sara"
+                    onClose={() => setPdfModalOpen(false)}
+                />
+            )}
         </div>
     );
 };

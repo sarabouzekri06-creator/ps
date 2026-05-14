@@ -38,7 +38,6 @@ class MedicationController extends Controller
                 ->where('user_id', Auth::id())
                 ->findOrFail($id);
 
-            // Ajouter frequency_type et frequency_details depuis la notification
             if ($medication->notification) {
                 $fd = $medication->notification->frequency_details;
                 $medication->frequency_type    = $medication->notification->frequency_type;
@@ -61,7 +60,6 @@ class MedicationController extends Controller
     // ── 3. Créer un médicament ────────────────────────────────────────────
     public function store(Request $request)
     {
-        // Décoder les champs JSON envoyés en string (FormData)
         if (is_string($request->takes)) {
             $request->merge(['takes' => json_decode($request->takes, true)]);
         }
@@ -112,7 +110,6 @@ class MedicationController extends Controller
                 ]);
 
                 foreach ($request->takes as $take) {
-                    // Accepter 'time' ou 'take_time' depuis le frontend
                     $takeTime = $take['take_time'] ?? $take['time'] ?? null;
                     if (!$takeTime) {
                         throw new \Exception("Clé 'take_time' absente : " . json_encode($take));
@@ -142,7 +139,6 @@ class MedicationController extends Controller
     // ── 4. Modifier un médicament ─────────────────────────────────────────
     public function update(Request $request, $id)
     {
-        // Décoder les champs JSON envoyés en string (FormData)
         if (is_string($request->takes)) {
             $request->merge(['takes' => json_decode($request->takes, true)]);
         }
@@ -164,11 +160,10 @@ class MedicationController extends Controller
                 $medication = Medication::where('user_id', Auth::id())
                     ->findOrFail($id);
 
-                // ── Mettre à jour la notification ──
                 if ($medication->notification_id) {
                     \App\Models\Notification::where('id', $medication->notification_id)
                         ->update([
-                            'start_day'         => now()->toDateString(), // automatique
+                            'start_day'         => now()->toDateString(),
                             'number_of_days'    => $request->number_of_days ?? 36500,
                             'frequency_type'    => $request->frequency_type,
                             'frequency_details' => $request->frequency_details
@@ -177,7 +172,6 @@ class MedicationController extends Controller
                         ]);
                 }
 
-                // ── Gérer l'image ──
                 $imagePath = $medication->medication_image;
                 if ($request->hasFile('medication_image')) {
                     if ($imagePath) {
@@ -187,7 +181,6 @@ class MedicationController extends Controller
                         ->store('medications', 'public');
                 }
 
-                // ── Mettre à jour le médicament ──
                 $medication->update([
                     'medication_name'  => $request->medication_name,
                     'current_stock'    => $request->current_stock,
@@ -196,13 +189,11 @@ class MedicationController extends Controller
                     'medication_image' => $imagePath,
                 ]);
 
-                // ── Synchroniser les prises ──
                 $incomingIds = collect($request->takes)
                     ->pluck('id')
                     ->filter()
                     ->values();
 
-                // Supprimer les prises retirées
                 $medication->takes()
                     ->whereNotIn('id', $incomingIds)
                     ->each(function ($take) {
@@ -210,7 +201,6 @@ class MedicationController extends Controller
                         $take->delete();
                     });
 
-                // Mettre à jour ou créer
                 foreach ($request->takes as $take) {
                     $takeTime = $take['take_time'] ?? $take['time'] ?? null;
                     if (!$takeTime) {
@@ -293,6 +283,33 @@ class MedicationController extends Controller
 
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    // ── 7. Réapprovisionner le stock ✅ ───────────────────────────────────
+    public function restock(Request $request, $id)
+    {
+        $request->validate([
+            'quantity' => 'required|integer|min:1',
+        ]);
+
+        try {
+            $medication = Medication::where('id', $id)
+                ->where('user_id', Auth::id())
+                ->firstOrFail();
+
+            $medication->increment('current_stock', $request->quantity);
+
+            return response()->json([
+                'message'       => 'Stock réapprovisionné avec succès !',
+                'current_stock' => $medication->fresh()->current_stock,
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'error'   => 'Erreur lors du réapprovisionnement',
+                'message' => $e->getMessage(),
+            ], 500);
         }
     }
 }

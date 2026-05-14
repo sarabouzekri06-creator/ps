@@ -1,256 +1,465 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
+import "./profil.css";
+
+const API = "http://localhost:8000/api";
+
+const urlBase64ToUint8Array = (base64String) => {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64  = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw     = window.atob(base64);
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+};
 
 export default function Profile() {
   const [user, setUser] = useState({
-    nom: "",
-    prenom: "",
-    email: "",
-    age: "",
-    maladies: "",
-    notification: "" // Initialisé pour éviter le NULL en SQL
+    nom: "", prenom: "", email: "", age: "", maladies: "", notification: "patient"
   });
+  const [contactEmail,  setContactEmail]  = useState("");
+  const [showModal,     setShowModal]     = useState(false);
+  const [saved,         setSaved]         = useState(false);
+  const [profileImage,  setProfileImage]  = useState(null);
+  const [imageFile,     setImageFile]     = useState(null);
+  const [saving,        setSaving]        = useState(false);
+  const [responsables,  setResponsables]  = useState([]);
+  const [showRespForm,  setShowRespForm]  = useState(false);
+  const [newRespEmail,  setNewRespEmail]  = useState("");
+  const [pushStatus,    setPushStatus]    = useState('idle');
 
-  const [patientEmail, setPatientEmail] = useState("");
-  const [responsable, setResponsable] = useState({ email: "", telephone: "" });
-  const [showModalPatient, setShowModalPatient] = useState(false);
-  const [showModalResp, setShowModalResp] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [profileImage, setProfileImage] = useState("https://via.placeholder.com/150");
-  const [imageFile, setImageFile] = useState(null); // Pour stocker le fichier réel
+  const token  = localStorage.getItem("token");
+  const config = { headers: { Authorization: `Bearer ${token}` } };
 
-  const token = localStorage.getItem("token");
-  const config = {
-    headers: { Authorization: `Bearer ${token}` }
-  };
-
+  // ── Vérifier permission push au chargement ─────────────────────
   useEffect(() => {
-    const loadUserData = async () => {
-      try {
-        const response = await axios.get("http://localhost:8000/api/user", config);
-        const data = response.data;
-        
-        setUser({
-          nom: data.nom || "",
-          prenom: data.prenom || "",
-          email: data.email || "",
-          age: data.age || "",
-          maladies: data.maladies || "",
-          notification: data.notification_type || "patient"
-        });
+    if (typeof Notification !== 'undefined') {
+      if (Notification.permission === 'granted') setPushStatus('enabled');
+      if (Notification.permission === 'denied')  setPushStatus('denied');
+    }
+  }, []);
 
-        // Affichage de l'image si elle existe sur le serveur
-        if (data.profile_image) {
-          setProfileImage(`http://localhost:8000/storage/${data.profile_image}`);
-        }
+  // ── Charger le profil (UN SEUL useEffect) ──────────────────────
+  useEffect(() => {
+    if (!token) return;
+    axios.get(`${API}/user`, config).then(({ data }) => {
 
-        if (data.is_profile_complete) {
-          setSaved(true);
-          if (data.notification_type === "patient") {
-            setPatientEmail(data.contact_alerte_email || "");
-          } else {
-            setResponsable({ email: data.contact_alerte_email || "", telephone: "" });
-          }
-        }
-      } catch (error) {
-        console.error("Erreur lors du chargement:", error);
+      // API retourne { user: {...}, responsables: [...] }
+      const u = data.user || data; // compatibilité si API change
+
+      setUser({
+        nom:          u.nom               || "",
+        prenom:       u.prenom            || "",
+        email:        u.email             || "",
+        age:          u.age               || "",
+        maladies:     u.maladies          || "",
+        notification: u.notification_type || "patient",
+      });
+
+      if (u.profile_image)
+        setProfileImage(`http://localhost:8000/storage/${u.profile_image}`);
+
+      if (u.is_profile_complete) {
+        setSaved(true);
+        setContactEmail(u.contact_alerte_email || "");
       }
-    };
-    if (token) loadUserData();
+
+      if (data.responsables) {
+        setResponsables(data.responsables);
+      }
+
+    }).catch(console.error);
   }, [token]);
 
-  const handleChange = (e) => {
-    setUser({ ...user, [e.target.name]: e.target.value });
+
+  
+  // ── Test email ─────────────────────────────────────────────────
+  const testNotif = async () => {
+    try {
+      await axios.get(`${API}/test-notif`, config);
+      alert("✅ Notif envoyée ! Vérifie ton email : " + contactEmail);
+    } catch (err) {
+      alert("❌ Erreur : " + (err.response?.data?.message || "Erreur serveur"));
+    }
   };
 
+  // ── Activer push notifications ─────────────────────────────────
+ const activatePush = async () => {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      alert('Votre navigateur ne supporte pas les notifications push.');
+      return;
+    }
+
+    setPushStatus('loading');
+    try {
+      console.log("1. Enregistrement du SW...");
+      const reg = await navigator.serviceWorker.register('/sw.js');
+      await navigator.serviceWorker.ready;
+
+      console.log("2. Demande de permission...");
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') {
+        setPushStatus('denied');
+        console.warn("Permission refusée par l'utilisateur");
+        return;
+      }
+
+      const vapidKey = process.env.REACT_APP_VAPID_PUBLIC_KEY;
+      console.log("3. Clé VAPID récupérée :", vapidKey);
+
+      if (!vapidKey) {
+        alert('❌ Clé VAPID manquante dans .env');
+        setPushStatus('idle');
+        return;
+      }
+
+      console.log("4. Tentative d'abonnement...");
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(vapidKey),
+      });
+
+      console.log("5. Abonnement réussi :", sub);
+
+      const emailPourNotif = user.notification === 'patient' ? user.email : contactEmail;
+
+      console.log("6. Envoi au serveur backend...");
+      await axios.post(`${API}/push/subscribe`, {
+        email: emailPourNotif,
+        endpoint: sub.endpoint,
+        keys: {
+          p256dh: btoa(String.fromCharCode(...new Uint8Array(sub.getKey('p256dh')))),
+          auth: btoa(String.fromCharCode(...new Uint8Array(sub.getKey('auth')))),
+        },
+      }, config);
+
+      setPushStatus('enabled');
+      alert('✅ Notifications push activées !');
+
+    } catch (err) {
+      console.error('Erreur détaillée :', err);
+      alert('❌ Erreur : ' + err.message);
+      setPushStatus('idle');
+    }
+  };
+  // ── Handlers ───────────────────────────────────────────────────
+  const handleChange      = (e) => setUser({ ...user, [e.target.name]: e.target.value });
   const handleImageChange = (e) => {
     const file = e.target.files[0];
-    if (file) {
-      setImageFile(file); // On garde le fichier pour l'envoi
-      setProfileImage(URL.createObjectURL(file)); // Aperçu local
-    }
+    if (file) { setImageFile(file); setProfileImage(URL.createObjectURL(file)); }
   };
-
   const handleRadioChange = (e) => {
-    const value = e.target.value;
-    setUser({ ...user, notification: value });
-    if (value === "patient") setShowModalPatient(true);
-    else setShowModalResp(true);
+    setUser({ ...user, notification: e.target.value });
+    setShowModal(true);
   };
 
-  const savePatient = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault();
-    setShowModalPatient(false);
-  };
-
-  const saveResponsable = (e) => {
-    e.preventDefault();
-    setShowModalResp(false);
-  };
-
-  const handleSaveAll = async (e) => {
-    e.preventDefault();
-    
-    const alerteEmail = user.notification === "patient" ? patientEmail : responsable.email;
-
-    if (!alerteEmail) {
-      alert("Veuillez compléter l'email de notification !");
-      user.notification === "patient" ? setShowModalPatient(true) : setShowModalResp(true);
-      return; 
-    }
-
-    // Utilisation de FormData pour envoyer l'image et les textes ensemble
-    const formData = new FormData();
-    formData.append("nom", user.nom);
-    formData.append("prenom", user.prenom);
-    formData.append("age", user.age);
-    formData.append("maladies", user.maladies);
-    formData.append("notificationType", user.notification);
-    formData.append("contactAlerte", alerteEmail);
-    
-    if (imageFile) {
-      formData.append("image", imageFile); // 'image' doit correspondre au $request->file('image') de Laravel
-    }
-
+    if (!contactEmail) { setShowModal(true); return; }
+    setSaving(true);
+    const fd = new FormData();
+    fd.append("nom",              user.nom);
+    fd.append("prenom",           user.prenom);
+    fd.append("age",              user.age);
+    fd.append("maladies",         user.maladies);
+    fd.append("notificationType", user.notification);
+    fd.append("contactAlerte",    contactEmail);
+    if (imageFile) fd.append("image", imageFile);
     try {
-      // On écrase le config pour ajouter le multipart/form-data
-      const multipartConfig = {
-        headers: { 
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "multipart/form-data" 
-        }
-      };
-
-      await axios.post("http://localhost:8000/api/user/update", formData, multipartConfig);
-      
+      await axios.post(`${API}/user/update`, fd, {
+        headers: { ...config.headers, "Content-Type": "multipart/form-data" }
+      });
       setSaved(true);
-      alert("Profil enregistré avec succès !");
-    } catch (error) {
-      console.error("Erreur Laravel:", error.response?.data);
-      alert("Erreur : " + (error.response?.data?.error_message || "Problème serveur"));
+    } catch (err) {
+      alert("Erreur : " + (err.response?.data?.message || "Problème serveur"));
+    } finally { setSaving(false); }
+  };
+
+  const toggleResponsable = async (id) => {
+    const { data } = await axios.patch(`${API}/responsables/${id}`, {}, config);
+    setResponsables(prev => prev.map(r => r.id === id ? data : r));
+  };
+
+  const addResponsable = async (e) => {
+    e.preventDefault();
+    try {
+      const { data } = await axios.post(
+        `${API}/responsables`,
+        { email_responsable: newRespEmail },
+        config
+      );
+      setResponsables(prev => [...prev, data]);
+      setNewRespEmail("");
+      setShowRespForm(false);
+    } catch (err) {
+      alert(err.response?.data?.message || "Erreur");
     }
+  };
+
+  const initials = `${user.nom?.charAt(0) ?? ""}${user.prenom?.charAt(0) ?? ""}`.toUpperCase() || "?";
+
+  const modalLabel = user.notification === "patient"
+    ? { title: "Votre email", sub: "Les notifications vous seront envoyées.", placeholder: "votre@email.com" }
+    : { title: "Votre email", sub: "Vous recevrez les notifications de votre patient.", placeholder: "responsable@email.com" };
+
+  const pushBtnStyle = {
+    marginTop:    10,
+    border:       `1.5px solid ${pushStatus === 'denied' ? '#ef4444' : '#4361ee'}`,
+    borderRadius: 12,
+    padding:      '8px 16px',
+    background:   pushStatus === 'enabled' ? '#eff2ff' : '#fff',
+    color:        pushStatus === 'denied'  ? '#ef4444' : '#4361ee',
+    cursor:       pushStatus === 'enabled' || pushStatus === 'loading' ? 'default' : 'pointer',
+    fontSize:     13,
+    fontWeight:   600,
+    width:        '100%',
+    opacity:      pushStatus === 'loading' ? 0.7 : 1,
   };
 
   return (
-    <div className="d-flex justify-content-center align-items-center vh-100 bg-light p-5">
-      <div className="card shadow-lg p-4" style={{ width: "850px", borderRadius: "20px", border: "none" }}>
-        <div className="row">
-          
-          <div className="col-md-4 text-center border-end pe-4 d-flex flex-column align-items-center justify-content-center">
-            <div className="position-relative mb-3">
-              <div 
-                className="rounded-circle overflow-hidden shadow-sm border border-4 border-white" 
-                style={{ width: "150px", height: "150px", backgroundColor: "#f8f9fa" }}
-              >
-                <img src={profileImage} className="w-100 h-100" style={{ objectFit: "cover" }} alt="Profil" />
+    <>
+      <div className="pf-root">
+        <div className="pf-card">
+
+          {/* ── SIDEBAR ── */}
+          <div className="pf-sidebar">
+            <div className="pf-avatar-wrap">
+              <div className="pf-avatar">
+                {profileImage
+                  ? <img src={profileImage} alt="profil" />
+                  : <span className="pf-avatar-initials">{initials}</span>}
               </div>
-              <label 
-                htmlFor="fileInput" 
-                className="position-absolute bottom-0 end-0 bg-primary rounded-circle d-flex align-items-center justify-content-center shadow"
-                style={{ width: "40px", height: "40px", cursor: "pointer", border: "3px solid white" }}
-              >
-                <span className="text-white fw-bold fs-4">+</span>
-                <input type="file" id="fileInput" className="d-none" accept="image/*" onChange={handleImageChange} />
-              </label>
+              {!saved && (
+                <label className="pf-avatar-upload" htmlFor="fileInput" title="Changer la photo">
+                  <i className="bi bi-camera-fill" />
+                  <input type="file" id="fileInput" className="d-none" accept="image/*" onChange={handleImageChange} />
+                </label>
+              )}
             </div>
-            <h5 className="text-primary mb-1 fw-bold">{user.nom || "Nom"} {user.prenom || "Prénom"}</h5>
-            <p className="text-muted small mb-3">{user.email || "email@exemple.com"}</p>
+
+            <h2 className="pf-sidebar-name">
+              {user.nom || user.prenom ? `${user.nom} ${user.prenom}` : "Mon Profil"}
+            </h2>
+            <p className="pf-sidebar-email">{user.email || "email@exemple.com"}</p>
+
+            {user.age      && <div className="pf-stat"><div className="pf-stat-label">Âge</div><div className="pf-stat-val">{user.age} ans</div></div>}
+            {user.maladies && <div className="pf-stat"><div className="pf-stat-label">Condition</div><div className="pf-stat-val">{user.maladies}</div></div>}
+
             {saved && (
-              <button className="btn btn-outline-primary btn-sm rounded-pill px-3" onClick={() => setSaved(false)}>
-                Modifier le profil
+              <div className="pf-notif-badge">
+                <i className={`bi ${user.notification === "patient" ? "bi-person-fill" : "bi-people-fill"}`} />
+                {user.notification === "patient" ? "Mode Patient" : "Mode Responsable"}
+              </div>
+            )}
+
+            {saved && (
+              <button className="pf-btn-outline" onClick={() => setSaved(false)}>
+                <i className="bi bi-pencil me-2" />Modifier
+              </button>
+            )}
+
+            {/* ── Push Notifications ── */}
+            {saved && (
+              <button
+                onClick={activatePush}
+                style={pushBtnStyle}
+              >
+                {pushStatus === 'loading' && <span>⏳ Activation…</span>}
+                {pushStatus === 'enabled' && <><i className="bi bi-bell-fill me-2" />Push activées ✅</>}
+                {pushStatus === 'denied'  && <><i className="bi bi-bell-slash me-2" />Bloquées</>}
+                {pushStatus === 'idle'    && <><i className="bi bi-bell me-2" />Activer les notifications</>}
+              </button>
+            )}
+
+            {pushStatus === 'denied' && (
+              <p style={{ fontSize: 11, color: '#ef4444', marginTop: 6, textAlign: 'center' }}>
+                Autorisez dans les paramètres du navigateur
+              </p>
+            )}
+
+            {/* ── Test email ── */}
+            {saved && (
+              <button onClick={testNotif} style={{
+                marginTop: 10, border: "1.5px solid #10b981", borderRadius: 12,
+                padding: "8px 16px", background: "#f0fdf4", color: "#10b981",
+                cursor: "pointer", fontSize: 13, fontWeight: 600, width: "100%",
+              }}>
+                <i className="bi bi-envelope me-2" />Tester l'email
               </button>
             )}
           </div>
 
-          <div className="col-md-8 ps-4">
-            <h4 className="mb-4 fw-bold text-dark">{saved ? "Détails du Profil" : "Compléter les Informations"}</h4>
+          {/* ── MAIN ── */}
+          <div className="pf-main">
+            <h3 className="pf-main-title">{saved ? "Informations du profil" : "Compléter le profil"}</h3>
 
             {saved ? (
-              <div className="animate__animated animate__fadeIn">
-                <p><strong>Nom :</strong> {user.nom}</p>
-                <p><strong>Prénom :</strong> {user.prenom}</p>
-                <p><strong>Email :</strong> {user.email}</p>
-                <p><strong>Âge :</strong> {user.age} ans</p>
-                <p><strong>Maladies :</strong> {user.maladies}</p>
-                <div className="p-3 bg-light border rounded-4">
-                  <h6 className="fw-bold text-primary">Destinataire :</h6>
-                  {user.notification === "patient" ? <p className="mb-0">Email Patient : {patientEmail}</p> : <p className="mb-0">Email responsable : {responsable.email}</p>}
-                </div>
-              </div>
-            ) : (
-              <form onSubmit={handleSaveAll} className="row g-3">
-                <div className="col-md-6">
-                  <input type="text" name="nom" value={user.nom} onChange={handleChange} className="form-control rounded-3" placeholder="Nom" required />
-                </div>
-                <div className="col-md-6">
-                  <input type="text" name="prenom" value={user.prenom} onChange={handleChange} className="form-control rounded-3" placeholder="Prénom" required />
-                </div>
-                <div className="col-12">
-                  <input type="email" name="email" value={user.email} onChange={handleChange} className="form-control rounded-3" placeholder="Email" required />
-                </div>
-                <div className="col-md-6">
-                  <input type="number" name="age" value={user.age} onChange={handleChange} className="form-control rounded-3" placeholder="Âge" required min="1" />
-                </div>
-                <div className="col-md-6">
-                  <input type="text" name="maladies" value={user.maladies} onChange={handleChange} className="form-control rounded-3" placeholder="Maladies" required />
+              <div>
+                <div className="pf-info-grid">
+                  {[
+                    { label: "Nom",               val: user.nom },
+                    { label: "Prénom",             val: user.prenom },
+                    { label: "Email",              val: user.email,                     full: true },
+                    { label: "Âge",                val: user.age ? `${user.age} ans` : "—" },
+                    { label: "Condition médicale", val: user.maladies },
+                  ].map(({ label, val, full }) => (
+                    <div key={label} className={`pf-info-item ${full ? "pf-info-full" : ""}`}>
+                      <div className="pf-info-label">{label}</div>
+                      <div className="pf-info-val">{val || "—"}</div>
+                    </div>
+                  ))}
                 </div>
 
-                <div className="col-12">
-                  <p className="mb-2 fw-bold text-secondary small text-uppercase">Notifications :</p>
-                  <div className="d-flex gap-4">
-                    <label className="form-check-label">
-                      <input type="radio" value="patient" checked={user.notification === "patient"} onChange={handleRadioChange} className="form-check-input me-2" /> 
-                      Patient
-                    </label>
-                    <label className="form-check-label">
-                      <input type="radio" value="responsable" checked={user.notification === "responsable"} onChange={handleRadioChange} className="form-check-input me-2" /> 
-                      Responsable
-                    </label>
+                <div className="pf-divider" />
+
+                <div className="pf-info-label" style={{ marginBottom: 10 }}>Contact de notification</div>
+                <div className="pf-notif-box">
+                  <div className="pf-notif-icon">
+                    <i className={`bi ${user.notification === "patient" ? "bi-person-fill" : "bi-people-fill"}`} />
+                  </div>
+                  <div>
+                    <div className="pf-radio-text">{user.notification === "patient" ? "Patient" : "Responsable"}</div>
+                    <div className="pf-radio-sub">{contactEmail || "—"}</div>
                   </div>
                 </div>
 
-                <div className="col-12 mt-4">
-                  <button type="submit" className="btn btn-success w-100 py-3 fw-bold shadow-sm rounded-3 text-uppercase" style={{ letterSpacing: "1px" }}>
-                    ENREGISTRER LES MODIFICATIONS
-                  </button>
+                {/* ── Délégation responsable ── */}
+                {user.notification === "responsable" && (
+                  <div style={{ marginTop: 20 }}>
+                    <div className="pf-divider" />
+                    <div className="pf-info-label" style={{ marginBottom: 10 }}>Gestion des responsables</div>
+
+                    {responsables.map(r => (
+                      <div key={r.id} style={{
+                        display: "flex", alignItems: "center", justifyContent: "space-between",
+                        padding: "10px 14px", borderRadius: 10, marginBottom: 8,
+                        background: r.is_active ? "#f0fdf4" : "#fafafa",
+                        border: `1.5px solid ${r.is_active ? "#10b981" : "#e2e8f0"}`,
+                      }}>
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: 13 }}>
+                            {r.ordre === 1 ? "👤 Principal" : "👥 Remplaçant"}
+                          </div>
+                          <div style={{ fontSize: 12, color: "#64748b" }}>{r.email_responsable}</div>
+                        </div>
+                        <button onClick={() => toggleResponsable(r.id)} style={{
+                          border: "none", borderRadius: 8, padding: "6px 14px",
+                          fontSize: 12, fontWeight: 600, cursor: "pointer",
+                          background: r.is_active ? "#fee2e2" : "#dcfce7",
+                          color: r.is_active ? "#ef4444" : "#10b981",
+                        }}>
+                          {r.is_active ? "Désactiver" : "Activer"}
+                        </button>
+                      </div>
+                    ))}
+
+                    {responsables.length < 2 && !showRespForm && (
+                      <button onClick={() => setShowRespForm(true)} style={{
+                        border: "1.5px dashed #cbd5e1", borderRadius: 10, padding: "10px 16px",
+                        width: "100%", background: "transparent", cursor: "pointer",
+                        fontSize: 13, color: "#64748b", marginTop: 6,
+                      }}>
+                        <i className="bi bi-plus-circle me-2" />Ajouter un responsable remplaçant
+                      </button>
+                    )}
+
+                    {showRespForm && (
+                      <form onSubmit={addResponsable} style={{ marginTop: 10 }}>
+                        <input
+                          type="email" required placeholder="email@exemple.com"
+                          value={newRespEmail} onChange={e => setNewRespEmail(e.target.value)}
+                          className="pf-input" style={{ marginBottom: 8 }}
+                        />
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <button type="submit" className="pf-submit" style={{ flex: 1 }}>Ajouter</button>
+                          <button type="button" onClick={() => setShowRespForm(false)} style={{
+                            border: "1.5px solid #e2e8f0", borderRadius: 12, padding: "10px 16px",
+                            background: "#fff", cursor: "pointer", color: "#64748b",
+                          }}>Annuler</button>
+                        </div>
+                      </form>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <form onSubmit={handleSave} style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+                <div className="pf-grid" style={{ flex: 1 }}>
+                  {[
+                    { name: "nom",      label: "Nom",               placeholder: "Dupont",            type: "text"            },
+                    { name: "prenom",   label: "Prénom",            placeholder: "Marie",             type: "text"            },
+                    { name: "email",    label: "Email",             placeholder: "marie@exemple.com", type: "email", full: true },
+                    { name: "age",      label: "Âge",               placeholder: "42",                type: "number"          },
+                    { name: "maladies", label: "Condition médicale", placeholder: "Diabète…",         type: "text"            },
+                  ].map(({ name, label, placeholder, type, full }) => (
+                    <div key={name} className={`pf-field ${full ? "pf-full" : ""}`}>
+                      <label>{label}</label>
+                      <input
+                        className="pf-input" type={type} name={name}
+                        value={user[name]} onChange={handleChange}
+                        placeholder={placeholder} required
+                        {...(name === "age" ? { min: "1" } : {})}
+                      />
+                    </div>
+                  ))}
+
+                  <div className="pf-full">
+                    <div className="pf-info-label" style={{ marginBottom: 10 }}>Type de notification</div>
+                    <div className="pf-notif-group">
+                      {[
+                        { val: "patient",     icon: "bi-person-fill", label: "Patient",     sub: "Notifications pour moi" },
+                        { val: "responsable", icon: "bi-people-fill", label: "Responsable", sub: "Pour un proche" },
+                      ].map(opt => (
+                        <label key={opt.val} className={`pf-radio-card ${user.notification === opt.val ? "active" : ""}`}>
+                          <input type="radio" value={opt.val} checked={user.notification === opt.val}
+                            onChange={handleRadioChange} className="d-none" />
+                          <div className={`pf-radio-dot ${user.notification === opt.val ? "checked" : ""}`} />
+                          <div>
+                            <div className="pf-radio-text">
+                              <i className={`bi ${opt.icon} me-1`} style={{ color: "var(--pf-accent)" }} />
+                              {opt.label}
+                            </div>
+                            <div className="pf-radio-sub">{opt.sub}</div>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
                 </div>
+
+                <div className="pf-divider" />
+                <button type="submit" className="pf-submit" disabled={saving}>
+                  {saving
+                    ? <><div className="pf-spinner" /> Enregistrement…</>
+                    : <><i className="bi bi-check2-circle" /> Enregistrer le profil</>}
+                </button>
               </form>
             )}
           </div>
         </div>
       </div>
 
-      {/* MODAL PATIENT */}
-      {showModalPatient && (
-        <div className="modal fade show d-block" style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}>
-          <div className="modal-dialog modal-dialog-centered">
-            <form className="modal-content border-0 shadow-lg rounded-4 p-4" onSubmit={savePatient}>
-              <div className="d-flex justify-content-between align-items-center mb-3">
-                <h5 className="mb-0 fw-bold">Email du Patient</h5>
-                <button type="button" className="btn-close" onClick={() => setShowModalPatient(false)}></button>
+      {/* ── MODAL EMAIL ── */}
+      {showModal && (
+        <div className="pf-modal-overlay" onClick={() => setShowModal(false)}>
+          <div className="pf-modal" onClick={e => e.stopPropagation()}>
+            <h4 className="pf-modal-title">{modalLabel.title}</h4>
+            <p className="pf-modal-sub">{modalLabel.sub}</p>
+            <form onSubmit={e => { e.preventDefault(); setShowModal(false); }}>
+              <div className="pf-field" style={{ marginBottom: 16 }}>
+                <label>Email</label>
+                <input
+                  className="pf-input" type="email" required autoFocus
+                  placeholder={modalLabel.placeholder}
+                  value={contactEmail}
+                  onChange={e => setContactEmail(e.target.value)}
+                />
               </div>
-              <input type="email" required className="form-control mb-3 py-2" placeholder="Email obligatoire" value={patientEmail} onChange={(e) => setPatientEmail(e.target.value)} />
-              <button type="submit" className="btn btn-primary w-100 py-2 fw-bold">Valider</button>
+              <button type="submit" className="pf-submit">
+                <i className="bi bi-check2" /> Valider
+              </button>
             </form>
           </div>
         </div>
       )}
-
-      {/* MODAL RESPONSABLE */}
-      {showModalResp && (
-        <div className="modal fade show d-block" style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}>
-          <div className="modal-dialog modal-dialog-centered">
-            <form className="modal-content border-0 shadow-lg rounded-4 p-4" onSubmit={saveResponsable}>
-              <div className="d-flex justify-content-between align-items-center mb-3">
-                <h5 className="mb-0 fw-bold">Infos Responsable</h5>
-                <button type="button" className="btn-close" onClick={() => setShowModalResp(false)}></button>
-              </div>
-              <input type="email" required placeholder="Email" className="form-control mb-3 py-2" value={responsable.email} onChange={(e) => setResponsable({...responsable, email: e.target.value})} />
-              <button type="submit" className="btn btn-primary w-100 py-2 fw-bold">Valider</button>
-            </form>
-          </div>
-        </div>
-      )}
-    </div>
+    </>
   );
 }
