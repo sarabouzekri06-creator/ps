@@ -4,7 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use App\Models\MediTake;
-
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class Medication extends Model
 {
 

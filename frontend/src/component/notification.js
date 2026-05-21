@@ -32,7 +32,6 @@ const offsetToDateStr = (offset) => {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 };
 
-const todayStr   = offsetToDateStr(0);
 const ALL_OFFSETS = [0, -1, -2, -3];
 
 const dateLabel = (offset) => {
@@ -42,48 +41,27 @@ const dateLabel = (offset) => {
   return d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
 };
 
-// ✅ shouldTakeOnDate corrigé pour quarterly / every2months
 const shouldTakeOnDate = (entity, dateStr) => {
   const date       = new Date(dateStr + 'T00:00:00');
   const JOURS      = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
   const jourNom    = JOURS[date.getDay()];
   const dayOfMonth = date.getDate();
-  const month      = date.getMonth(); // 0-11
-
-  // frequency_days peut être un objet { day: 15 } ou un tableau ['Lun','Mer']
-  const fd        = entity.frequency_days ?? {};
-  const targetDay = fd?.day ?? 1;
-
-  // Mois de départ pour calculer le cycle trimestriel / bimestriel
+  const month      = date.getMonth();
+  const fd         = entity.frequency_days ?? {};
+  const targetDay  = fd?.day ?? 1;
   const startMonth = entity.start_day
     ? new Date(entity.start_day + 'T00:00:00').getMonth()
     : 0;
 
   switch (entity.frequency_type) {
-    case 'daily':
-      return true;
-
-    case 'weekly':
-      return Array.isArray(fd)
-        ? fd.includes(jourNom)
-        : Array.isArray(entity.frequency_days) && entity.frequency_days.includes(jourNom);
-
-    case 'monthly':
-      return dayOfMonth === targetDay;
-
-    case 'every2months':
-      // Même jour, tous les 2 mois depuis startMonth
-      return dayOfMonth === targetDay &&
-             ((month - startMonth) % 2 + 2) % 2 === 0;
-
-    case 'quarterly':
-      // Même jour, tous les 3 mois depuis startMonth
-      // Ex: start Jan → affiche Jan/Avr/Juil/Oct uniquement
-      return dayOfMonth === targetDay &&
-             ((month - startMonth) % 3 + 3) % 3 === 0;
-
-    default:
-      return true;
+    case 'daily':        return true;
+    case 'weekly':       return Array.isArray(fd)
+      ? fd.includes(jourNom)
+      : Array.isArray(entity.frequency_days) && entity.frequency_days.includes(jourNom);
+    case 'monthly':      return dayOfMonth === targetDay;
+    case 'every2months': return dayOfMonth === targetDay && ((month - startMonth) % 2 + 2) % 2 === 0;
+    case 'quarterly':    return dayOfMonth === targetDay && ((month - startMonth) % 3 + 3) % 3 === 0;
+    default:             return true;
   }
 };
 
@@ -129,17 +107,24 @@ const Notification = () => {
     ALL_OFFSETS.forEach(offset => fetchForDate(offsetToDateStr(offset), offset === 0));
   }, []);
 
-  // ✅ Recharge tous les jours du cache
+  // ── Recharge tous les jours du cache ──────────────────────────────────
   const refreshAll = useCallback(() => {
     ALL_OFFSETS.forEach(offset => fetchForDate(offsetToDateStr(offset), true));
   }, [fetchForDate]);
+
+  // ✅ Écouter les events du GlobalReminderToast
+  useEffect(() => {
+    const handler = () => refreshAll();
+    window.addEventListener('reminder-done', handler);
+    return () => window.removeEventListener('reminder-done', handler);
+  }, [refreshAll]);
 
   // ── Marquer médicament comme pris ─────────────────────────────────────
   const markMedDone = async (takeId) => {
     try {
       await axios.post(`${BASE}/api/takes/${takeId}/done`, {}, { headers: hdrs() });
     } catch (e) { console.error(e); }
-    refreshAll(); // ✅ recharge tout l'historique
+    setTimeout(() => refreshAll(), 500);
   };
 
   // ── Ouvrir modal saisie mesure ─────────────────────────────────────────
@@ -160,7 +145,7 @@ const Notification = () => {
         note:       saisieNote,
       }, { headers: hdrs() });
       setSaisieModal(null);
-      refreshAll(); // ✅ recharge tout l'historique
+      refreshAll();
     } catch (e) {
       console.error(e);
       alert('Erreur lors de la saisie');
@@ -174,7 +159,6 @@ const Notification = () => {
     if (!data) return [];
     const items = [];
 
-    // Médicaments
     (data.medications ?? [])
       .filter(med => shouldTakeOnDate(med, dateStr))
       .forEach(med => {
@@ -197,18 +181,15 @@ const Notification = () => {
         });
       });
 
-    // ✅ Mesures — on passe start_day + frequency_days depuis les données API
     (data.measures ?? [])
       .filter(mes => shouldTakeOnDate({
         frequency_type: mes.frequency_type,
-        frequency_days: mes.frequency_days, // { day: 15 } ou ['Lun']
-        start_day:      mes.start_day,      // ✅ pour calculer le cycle
+        frequency_days: mes.frequency_days,
+        start_day:      mes.start_day,
       }, dateStr))
       .forEach(mes => {
         (mes.takes ?? []).forEach(take => {
           const time = (take.take_time ?? '00:00').substring(0, 5);
-
-          // ✅ isDone — accepte les deux formats de date (dd/mm et YYYY-MM-DD)
           const dateShort = new Date(dateStr + 'T00:00:00').toLocaleDateString('fr-FR', {
             day: '2-digit', month: '2-digit',
           });
@@ -266,7 +247,6 @@ const Notification = () => {
     <div className="nf-page">
       <div className="nf-container">
 
-        {/* ══ HEADER ══ */}
         <div className="nf-header">
           <div>
             <h1 className="nf-title">Notifications</h1>
@@ -277,7 +257,6 @@ const Notification = () => {
           <button className="nf-gear"><i className="bi bi-gear"></i></button>
         </div>
 
-        {/* ══ AUJOURD'HUI ══ */}
         <div className="nf-section-label nf-section-today">
           <span><i className="bi bi-bell-fill me-2"></i>Aujourd'hui</span>
           {todayGroup.pending > 0 && (
@@ -310,7 +289,6 @@ const Notification = () => {
           />
         ))}
 
-        {/* ══ HISTORIQUE ══ */}
         <div className="nf-section-label nf-section-history" style={{ marginTop: '1.5rem' }}>
           <span><i className="bi bi-clock-history me-2"></i>Historique récent</span>
         </div>
@@ -367,7 +345,6 @@ const Notification = () => {
         ))}
       </div>
 
-      {/* ══ MODAL SAISIE MESURE ══ */}
       {saisieModal && (
         <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
           onClick={e => e.target === e.currentTarget && setSaisieModal(null)}>
@@ -423,7 +400,6 @@ const Notification = () => {
   );
 };
 
-/* ── Card réutilisable ── */
 const NfCard = ({ notif, idx, isToday, isPastDay, onMedDone, onMeasureSaisie }) => {
   const icon = notif.type === 'med' ? 'bi-capsule' : 'bi-clipboard2-pulse';
   const imgUrl = notif.imgPath

@@ -14,6 +14,12 @@ const isPast = (timeStr) => {
     return now.getHours() > h || (now.getHours() === h && now.getMinutes() > m);
 };
 
+const isFutureTime = (timeStr) => {
+    const [h, m] = toHHMM(timeStr).split(':').map(Number);
+    const now = new Date();
+    return now.getHours() < h || (now.getHours() === h && now.getMinutes() < m);
+};
+
 const compareTime = (a, b) => (a.take_time || '').localeCompare(b.take_time || '');
 
 const shouldTakeOnDate = (entity, dateStr) => {
@@ -58,10 +64,9 @@ const buildWeek = (offsetWeeks = 0) => {
     });
 };
 
-const pctColor   = (pct) => pct === 100 ? '#1cc88a' : pct >= 50 ? '#f6a935' : '#e74a3b';
-const sevColor   = (s)   => s === 'High' ? '#e74a3b' : s === 'Moderate' ? '#f6a935' : '#1cc88a';
+const pctColor = (pct) => pct === 100 ? '#1cc88a' : pct >= 50 ? '#f6a935' : '#e74a3b';
+const sevColor = (s)   => s === 'High' ? '#e74a3b' : s === 'Moderate' ? '#f6a935' : '#1cc88a';
 
-// ── Modal saisie mesure ───────────────────────────────────────────────────────
 const SaisieModal = ({ mesure, onClose, onSave }) => {
     const [value,  setValue]  = useState('');
     const [note,   setNote]   = useState('');
@@ -89,7 +94,6 @@ const SaisieModal = ({ mesure, onClose, onSave }) => {
                         </div>
                         <button onClick={onClose} style={{ background: '#f1f5f9', border: 'none', borderRadius: 8, width: 30, height: 30, cursor: 'pointer', fontSize: 18 }}>×</button>
                     </div>
-
                     <label style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Valeur mesurée</label>
                     <input
                         type="number"
@@ -117,12 +121,61 @@ const SaisieModal = ({ mesure, onClose, onSave }) => {
                     </div>
                 </div>
             </div>
-            <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
         </div>
     );
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Modal confirmation notification push ──────────────────────────────────────
+const NotifModal = ({ notifModal, onClose, onConfirmer, onSaisir }) => {
+    const isMed = notifModal.type === 'medicament';
+    return (
+        <div style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+            zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center'
+        }}>
+            <div style={{
+                background: '#fff', borderRadius: 20, padding: 32,
+                width: 340, maxWidth: '90vw', textAlign: 'center',
+                boxShadow: '0 20px 60px rgba(0,0,0,0.2)'
+            }}>
+                <div style={{ fontSize: 48, marginBottom: 12 }}>
+                    {isMed ? '💊' : '📊'}
+                </div>
+                <h4 style={{ fontWeight: 700, marginBottom: 8 }}>
+                    {isMed ? 'Avez-vous pris votre médicament ?' : 'Avez-vous fait votre mesure ?'}
+                </h4>
+                <p style={{ color: '#64748b', fontSize: 14, marginBottom: 24 }}>
+                    {isMed
+                        ? 'Confirmez la prise pour mettre à jour votre suivi.'
+                        : 'Voulez-vous saisir votre mesure maintenant ?'}
+                </p>
+                <div style={{ display: 'flex', gap: 10 }}>
+                    <button
+                        onClick={onClose}
+                        style={{
+                            flex: 1, border: '1.5px solid #e2e8f0', borderRadius: 12,
+                            padding: '12px 0', fontSize: 14, fontWeight: 600,
+                            cursor: 'pointer', background: '#fff', color: '#64748b'
+                        }}>
+                        ⏰ Plus tard
+                    </button>
+                    <button
+                        onClick={isMed ? onConfirmer : onSaisir}
+                        style={{
+                            flex: 2, border: 'none', borderRadius: 12,
+                            padding: '12px 0', fontSize: 14, fontWeight: 700,
+                            cursor: 'pointer',
+                            background: isMed ? '#1cc88a' : '#4e73df',
+                            color: '#fff'
+                        }}>
+                        {isMed ? '✅ Oui, pris !' : '📝 Saisir maintenant'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const Dashboard = () => {
     const navigate = useNavigate();
     const todayISO = useMemo(() => new Date().toISOString().split('T')[0], []);
@@ -133,8 +186,9 @@ const Dashboard = () => {
     const [loadingDate,    setLoadingDate]    = useState(null);
     const [fabOpen,        setFabOpen]        = useState(false);
     const [saisieModal,    setSaisieModal]    = useState(null);
-    const [activeTab,      setActiveTab]      = useState('all'); // 'all' | 'med' | 'measure'
-    const [page,           setPage]           = useState(1);    // pagination
+    const [activeTab,      setActiveTab]      = useState('all');
+    const [page,           setPage]           = useState(1);
+    const [notifModal,     setNotifModal]     = useState(null);
 
     const [userCreatedAt, setUserCreatedAt] = useState(
         () => localStorage.getItem('user_created_at') ?? null
@@ -149,7 +203,6 @@ const Dashboard = () => {
         return -Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000));
     }, [userCreatedAt]);
 
-    // ── Fetch ─────────────────────────────────────────────────────────────
     const fetchForDate = useCallback(async (dateStr, force = false) => {
         if (!force && dateCache[dateStr]) return;
         setLoadingDate(dateStr);
@@ -177,9 +230,70 @@ const Dashboard = () => {
     }, []);
 
     useEffect(() => { fetchForDate(activeFullDate); }, [activeFullDate]);
-
-    // Reset page quand on change de date ou d'onglet
     useEffect(() => { setPage(1); }, [activeFullDate, activeTab]);
+
+    useEffect(() => {
+        const handler = () => fetchForDate(todayISO, true);
+        window.addEventListener('reminder-done', handler);
+        return () => window.removeEventListener('reminder-done', handler);
+    }, [fetchForDate, todayISO]);
+
+    // ── UN SEUL useEffect pour les notifications push ─────────────────────────
+    useEffect(() => {
+        // Cas 1 : site était FERMÉ → URL contient take_id
+        const params = new URLSearchParams(window.location.search);
+        const takeId = params.get('take_id');
+        const type   = params.get('type');
+        if (takeId && type) {
+            setNotifModal({ takeId, type });
+            window.history.replaceState({}, '', '/');
+        }
+
+        // Cas 2 : site était OUVERT → recevoir message du service worker
+        const handleMessage = (event) => {
+            if (event.data && event.data.type === 'NOTIF_CLICK') {
+                const urlParams = new URLSearchParams(event.data.url.split('?')[1]);
+                const tid = urlParams.get('take_id');
+                const typ = urlParams.get('type');
+                if (tid && typ) {
+                    setNotifModal({ takeId: tid, type: typ });
+                }
+            }
+        };
+
+        navigator.serviceWorker.addEventListener('message', handleMessage);
+        return () => navigator.serviceWorker.removeEventListener('message', handleMessage);
+    }, []);
+
+    // ── Confirmer la prise depuis le modal ────────────────────────────────────
+    const handleConfirmerPrise = async () => {
+        try {
+            await axios.post(
+                `${API}/api/medicaments/${notifModal.takeId}/confirmer`,
+                {},
+                { headers: authHeaders() }
+            );
+            toast.success('✅ Prise confirmée !');
+            fetchForDate(todayISO, true);
+        } catch {
+            toast.error('Erreur serveur');
+        }
+        setNotifModal(null);
+    };
+
+    // ── Ouvrir le modal saisie mesure ─────────────────────────────────────────
+    const handleSaisirMesure = async () => {
+        try {
+            const res = await axios.get(
+                `${API}/api/measure-take/${notifModal.takeId}`,
+                { headers: authHeaders() }
+            );
+            setSaisieModal(res.data);
+        } catch {
+            toast.error('Erreur serveur');
+        }
+        setNotifModal(null);
+    };
 
     const isToday      = activeFullDate === todayISO;
     const isPastDate   = activeFullDate < todayISO;
@@ -188,7 +302,6 @@ const Dashboard = () => {
     const activeDateData = dateCache[activeFullDate];
     const todayData      = dateCache[todayISO] ?? { medications: [], measures: [] };
 
-    // ── Takes médicaments ─────────────────────────────────────────────────
     const medTakes = useMemo(() => {
         if (!activeDateData) return [];
         const meds = isFutureDate
@@ -207,7 +320,6 @@ const Dashboard = () => {
             .sort(compareTime);
     }, [activeDateData, activeFullDate, isFutureDate]);
 
-    // ── Takes mesures ─────────────────────────────────────────────────────
     const measureTakes = useMemo(() => {
         if (!activeDateData) return [];
         const measures = isFutureDate
@@ -231,7 +343,6 @@ const Dashboard = () => {
             .sort(compareTime);
     }, [activeDateData, activeFullDate, isFutureDate]);
 
-    // ── Tous les rappels filtrés par onglet ───────────────────────────────
     const allTakes = useMemo(() => {
         const combined = [...medTakes, ...measureTakes].sort(compareTime);
         if (activeTab === 'med')     return combined.filter(t => t._type === 'med');
@@ -239,11 +350,9 @@ const Dashboard = () => {
         return combined;
     }, [medTakes, measureTakes, activeTab]);
 
-    // ── Pagination ────────────────────────────────────────────────────────
-    const totalPages   = Math.ceil(allTakes.length / ITEMS_PER_PAGE);
-    const pagedTakes   = allTakes.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+    const totalPages = Math.ceil(allTakes.length / ITEMS_PER_PAGE);
+    const pagedTakes = allTakes.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
 
-    // ── Stats ─────────────────────────────────────────────────────────────
     const activeDayStats = useMemo(() => {
         const combined = [...medTakes, ...measureTakes];
         const total    = combined.length;
@@ -253,7 +362,6 @@ const Dashboard = () => {
         return { total, done, missed, pct };
     }, [medTakes, measureTakes, isPastDate]);
 
-    // ── Observance (carte stat) ───────────────────────────────────────────
     const observance = useMemo(() => {
         const medT = (todayData.medications || [])
             .filter(m => shouldTakeOnDate(m, todayISO))
@@ -267,7 +375,6 @@ const Dashboard = () => {
         return Math.round((all.filter(t => t.status === 'done').length / total) * 100) + '%';
     }, [todayData, todayISO]);
 
-    // ── weekStats ─────────────────────────────────────────────────────────
     const weekStats = useMemo(() => {
         const result = {};
         weekDays.forEach(d => {
@@ -292,26 +399,49 @@ const Dashboard = () => {
     [todayData]);
 
     const statCards = useMemo(() => [
-        { title: 'Observance',  val: observance,                            sub: "Méds + Mesures aujourd'hui", icon: 'graph-up-arrow',      color: '#4e73df', bg: '#eef2ff' },
-        { title: 'Médicaments', val: (todayData.medications || []).length,   sub: 'Traitements actifs',         icon: 'capsule',             color: '#1cc88a', bg: '#eafaf1' },
-        { title: 'Mesures',     val: (todayData.measures    || []).length,   sub: 'Suivis configurés',          icon: 'clipboard2-pulse',    color: '#6f42c1', bg: '#f5f0ff' },
+        { title: 'Observance',  val: observance,                            sub: "Méds + Mesures aujourd'hui", icon: 'graph-up-arrow',       color: '#4e73df', bg: '#eef2ff' },
+        { title: 'Médicaments', val: (todayData.medications || []).length,   sub: 'Traitements actifs',         icon: 'capsule',              color: '#1cc88a', bg: '#eafaf1' },
+        { title: 'Mesures',     val: (todayData.measures    || []).length,   sub: 'Suivis configurés',          icon: 'clipboard2-pulse',     color: '#6f42c1', bg: '#f5f0ff' },
         { title: 'Stocks bas',  val: lowStocks.length,                       sub: 'À renouveler',               icon: 'exclamation-triangle', color: '#e74a3b', bg: '#fff5f5' },
     ], [observance, todayData, lowStocks]);
 
-    // ── Actions ───────────────────────────────────────────────────────────
+    const markTakeDoneInCache = useCallback((takeId) => {
+        setDateCache(prev => {
+            const cached = prev[todayISO];
+            if (!cached) return prev;
+            const updateTakes = (list) =>
+                (list || []).map(entity => ({
+                    ...entity,
+                    takes: (entity.takes || []).map(t =>
+                        t.id === takeId ? { ...t, status: 'done' } : t
+                    ),
+                }));
+            return {
+                ...prev,
+                [todayISO]: {
+                    ...cached,
+                    medications: updateTakes(cached.medications),
+                    measures:    updateTakes(cached.measures),
+                },
+            };
+        });
+    }, [todayISO]);
+
     const markMedDone = useCallback(async (takeId) => {
+        markTakeDoneInCache(takeId);
         try {
             await axios.post(`${API}/api/takes/${takeId}/done`, {}, { headers: authHeaders() });
             toast.success("C'est enregistré !", { id: 'med-done' });
+        } catch {
+            toast.error('Erreur serveur.');
             fetchForDate(todayISO, true);
-        } catch { toast.error('Erreur serveur.'); }
-    }, [fetchForDate, todayISO]);
+        }
+    }, [fetchForDate, todayISO, markTakeDoneInCache]);
 
     const saveMeasure = useCallback(async (measureId, value, note) => {
         await axios.post(`${API}/api/measures/result`, { measure_id: measureId, value, note }, { headers: authHeaders() });
         toast.success("Mesure enregistrée !", { id: 'mes-done' });
-        fetchForDate(todayISO, true);
-    }, [fetchForDate, todayISO]);
+    }, []);
 
     const isLoadingActive = loadingDate === activeFullDate;
 
@@ -331,7 +461,6 @@ const Dashboard = () => {
     return (
         <div className="container-fluid min-vh-100 bg-light py-4 px-xl-5" style={{ fontFamily: "'Inter', sans-serif" }}>
 
-            {/* ── HEADER ── */}
             <header className="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
                 <div>
                     <h2 className="fw-bold text-dark mb-1">Bonjour 👋</h2>
@@ -340,10 +469,8 @@ const Dashboard = () => {
                         {new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
                     </p>
                 </div>
-                
             </header>
 
-            {/* ── CALENDRIER ── */}
             <section className="mb-4">
                 <div className="card border-0 shadow-sm rounded-4 p-2 bg-white">
                     <div className="d-flex align-items-center gap-1">
@@ -351,8 +478,7 @@ const Dashboard = () => {
                             className="btn btn-sm btn-light rounded-circle flex-shrink-0"
                             style={{ width: 34, height: 34 }}
                             onClick={() => setWeekOffset(w => Math.max(w - 1, minWeekOffset))}
-                            disabled={weekOffset <= minWeekOffset}
-                        >
+                            disabled={weekOffset <= minWeekOffset}>
                             <i className="bi bi-chevron-left" />
                         </button>
                         <div className="d-flex flex-grow-1">
@@ -393,7 +519,6 @@ const Dashboard = () => {
                 </div>
             </section>
 
-            {/* ── STAT CARDS ── */}
             <section className="row g-3 mb-4">
                 {statCards.map((card, i) => (
                     <div className="col-6 col-xl-3" key={i}>
@@ -413,14 +538,9 @@ const Dashboard = () => {
                 ))}
             </section>
 
-            {/* ── LAYOUT PRINCIPAL ── */}
             <div className="row g-4">
-
-                {/* ── SECTION RAPPELS ── */}
                 <div className="col-lg-8">
                     <div className="card border-0 shadow-sm rounded-4 p-4 bg-white">
-
-                        {/* En-tête */}
                         <div className="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
                             <div>
                                 <h5 className="fw-bold text-dark mb-1">
@@ -435,7 +555,6 @@ const Dashboard = () => {
                                         <span className="badge bg-success rounded-pill">{activeDayStats.done} pris</span>
                                         {isPastDate && <span className="badge bg-danger rounded-pill">{activeDayStats.missed} manqués</span>}
                                         <span className="badge bg-secondary rounded-pill">{activeDayStats.total} total</span>
-                                        
                                     </div>
                                 )}
                             </div>
@@ -444,7 +563,6 @@ const Dashboard = () => {
                             </span>
                         </div>
 
-                        {/* Barre progression */}
                         {activeDayStats.total > 0 && (
                             <div className="mb-3">
                                 <div className="progress rounded-pill" style={{ height: 5 }}>
@@ -457,7 +575,6 @@ const Dashboard = () => {
                             </div>
                         )}
 
-                        {/* ── Onglets filtre ── */}
                         <div className="d-flex gap-2 mb-3 flex-wrap">
                             {[
                                 { key: 'all',     label: 'Tous',        icon: 'bi-grid',             count: medTakes.length + measureTakes.length },
@@ -470,24 +587,19 @@ const Dashboard = () => {
                                     style={{
                                         background: activeTab === tab.key ? '#4e73df' : '#f1f5f9',
                                         color:      activeTab === tab.key ? '#fff'    : '#64748b',
-                                        border:     'none',
-                                        fontWeight: 600,
-                                        fontSize:   12,
-                                        padding:    '5px 14px',
-                                        transition: 'all 0.15s',
+                                        border:     'none', fontWeight: 600, fontSize: 12, padding: '5px 14px', transition: 'all 0.15s',
                                     }}>
                                     <i className={`bi ${tab.icon}`} />
                                     {tab.label}
                                     <span style={{
                                         background: activeTab === tab.key ? 'rgba(255,255,255,0.25)' : '#e2e8f0',
-                                        color:      activeTab === tab.key ? '#fff' : '#64748b',
+                                        color: activeTab === tab.key ? '#fff' : '#64748b',
                                         borderRadius: 99, fontSize: 10, padding: '1px 7px', fontWeight: 700,
                                     }}>{tab.count}</span>
                                 </button>
                             ))}
                         </div>
 
-                        {/* ── Liste rappels ── */}
                         {isLoadingActive ? (
                             <div className="text-center py-4">
                                 <div className="spinner-border spinner-border-sm text-primary" />
@@ -502,10 +614,11 @@ const Dashboard = () => {
                             <>
                                 <div className="d-flex flex-column gap-2">
                                     {pagedTakes.map((take, j) => {
-                                        const isDone   = take.status === 'done';
-                                        const isMissed = isPastDate && !isDone;
-                                        const isLate   = !isDone && isToday && take._type === 'med' && isPast(take.take_time);
-                                        const isMes    = take._type === 'measure';
+                                        const isMes       = take._type === 'measure';
+                                        const isFuture    = isToday && isFutureTime(take.take_time);
+                                        const isDone      = isFuture ? false : take.status === 'done';
+                                        const isMissed    = isPastDate && !isDone;
+                                        const isLate      = !isDone && isToday && !isMes && isPast(take.take_time);
 
                                         const bgColor = isDone   ? '#f0faf5'
                                                       : isMissed ? '#fff5f5'
@@ -522,7 +635,6 @@ const Dashboard = () => {
                                                 className="d-flex align-items-center p-2 rounded-3 gap-3"
                                                 style={{ backgroundColor: bgColor, borderLeft: `3px solid ${borderColor}`, opacity: isDone ? 0.75 : 1, transition: 'all 0.2s' }}>
 
-                                                {/* Icône */}
                                                 <div className="d-flex align-items-center justify-content-center rounded-3 bg-white shadow-sm flex-shrink-0"
                                                     style={{ width: 44, height: 44, border: `1.5px solid ${take._color}22` }}>
                                                     {!isMes && take._image
@@ -531,17 +643,16 @@ const Dashboard = () => {
                                                     }
                                                 </div>
 
-                                                {/* Infos */}
                                                 <div className="flex-grow-1 overflow-hidden">
                                                     <div className="d-flex align-items-center gap-2 flex-wrap">
                                                         <h6 className="mb-0 fw-bold text-truncate" style={{ fontSize: 14 }}>{take._name}</h6>
-                                                        {/* Type badge */}
                                                         <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: `${take._color}18`, color: take._color }}>
                                                             {isMes ? 'Mesure' : 'Méd.'}
                                                         </span>
-                                                        {isDone   && <span className="badge bg-success"  style={{ fontSize: '0.6rem' }}>✓ Fait</span>}
-                                                        {isMissed && <span className="badge bg-danger"   style={{ fontSize: '0.6rem' }}>✗ Manqué</span>}
+                                                        {isDone   && <span className="badge bg-success"           style={{ fontSize: '0.6rem' }}>✓ Fait</span>}
+                                                        {isMissed && <span className="badge bg-danger"            style={{ fontSize: '0.6rem' }}>✗ Manqué</span>}
                                                         {isLate   && <span className="badge bg-warning text-dark" style={{ fontSize: '0.6rem' }}>En retard</span>}
+                                                        {isFuture && !isDone && <span className="badge bg-light text-muted border" style={{ fontSize: '0.6rem' }}>À venir</span>}
                                                     </div>
                                                     <small className="text-muted">
                                                         <i className="bi bi-clock me-1" />{toHHMM(take.take_time)}
@@ -550,9 +661,12 @@ const Dashboard = () => {
                                                     </small>
                                                 </div>
 
-                                                {/* Action */}
                                                 {isToday && !isDone ? (
-                                                    isMes ? (
+                                                    isFuture ? (
+                                                        <span className="badge bg-light text-muted rounded-pill flex-shrink-0 border" style={{ fontSize: 11 }}>
+                                                            <i className="bi bi-clock me-1" />{toHHMM(take.take_time)}
+                                                        </span>
+                                                    ) : isMes ? (
                                                         <button
                                                             onClick={() => setSaisieModal(take._mes)}
                                                             className="btn btn-sm rounded-pill px-3 fw-bold flex-shrink-0"
@@ -570,9 +684,7 @@ const Dashboard = () => {
                                                 ) : isDone ? (
                                                     <span className="badge bg-success rounded-pill flex-shrink-0">✓ Fait</span>
                                                 ) : isPastDate ? (
-                                                    <span className={`badge rounded-pill flex-shrink-0 ${isDone ? 'bg-success' : 'bg-danger'}`}>
-                                                        {isDone ? '✓ Pris' : '✗ Manqué'}
-                                                    </span>
+                                                    <span className="badge rounded-pill flex-shrink-0 bg-danger">✗ Manqué</span>
                                                 ) : (
                                                     <span className="badge bg-light text-muted rounded-pill flex-shrink-0 border">À venir</span>
                                                 )}
@@ -581,43 +693,30 @@ const Dashboard = () => {
                                     })}
                                 </div>
 
-                                {/* ── PAGINATION ── */}
                                 {totalPages > 1 && (
                                     <div className="d-flex align-items-center justify-content-between mt-4 pt-3" style={{ borderTop: '1px solid #f1f5f9' }}>
                                         <small className="text-muted">
                                             {(page - 1) * ITEMS_PER_PAGE + 1}–{Math.min(page * ITEMS_PER_PAGE, allTakes.length)} sur {allTakes.length} rappels
                                         </small>
                                         <div className="d-flex gap-2 align-items-center">
-                                            {/* Btn précédent */}
-                                            <button
-                                                onClick={() => setPage(p => Math.max(1, p - 1))}
-                                                disabled={page === 1}
+                                            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
                                                 className="btn btn-sm btn-light rounded-circle"
                                                 style={{ width: 32, height: 32, padding: 0, opacity: page === 1 ? 0.4 : 1 }}>
                                                 <i className="bi bi-chevron-left" style={{ fontSize: 12 }} />
                                             </button>
-
-                                            {/* Numéros de page */}
                                             {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
-                                                <button key={p}
-                                                    onClick={() => setPage(p)}
+                                                <button key={p} onClick={() => setPage(p)}
                                                     className="btn btn-sm rounded-circle"
                                                     style={{
                                                         width: 32, height: 32, padding: 0,
-                                                        background:  page === p ? '#4e73df' : '#f1f5f9',
-                                                        color:       page === p ? '#fff'    : '#64748b',
-                                                        border:      'none',
-                                                        fontWeight:  page === p ? 700 : 400,
-                                                        fontSize:    13,
+                                                        background: page === p ? '#4e73df' : '#f1f5f9',
+                                                        color:      page === p ? '#fff'    : '#64748b',
+                                                        border: 'none', fontWeight: page === p ? 700 : 400, fontSize: 13,
                                                     }}>
                                                     {p}
                                                 </button>
                                             ))}
-
-                                            {/* Btn suivant */}
-                                            <button
-                                                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                                                disabled={page === totalPages}
+                                            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
                                                 className="btn btn-sm btn-light rounded-circle"
                                                 style={{ width: 32, height: 32, padding: 0, opacity: page === totalPages ? 0.4 : 1 }}>
                                                 <i className="bi bi-chevron-right" style={{ fontSize: 12 }} />
@@ -630,11 +729,8 @@ const Dashboard = () => {
                     </div>
                 </div>
 
-                {/* ── COLONNE DROITE ── */}
                 <div className="col-lg-4">
                     <div className="d-flex flex-column gap-4">
-
-                        {/* Stocks critiques */}
                         {lowStocks.length > 0 && (
                             <div className="card border-0 shadow-sm rounded-4 p-4 bg-white border-start border-4 border-danger">
                                 <h6 className="fw-bold text-danger mb-3">
@@ -658,15 +754,14 @@ const Dashboard = () => {
                             </div>
                         )}
 
-                        {/* Résumé du jour */}
                         <div className="card border-0 shadow-sm rounded-4 p-4 bg-white">
                             <h6 className="fw-bold mb-3">
                                 <i className="bi bi-bar-chart-fill text-primary me-2" />Résumé — {dateLabel}
                             </h6>
                             <div className="d-flex flex-column gap-2">
                                 {[
-                                    { label: 'Médicaments',  val: medTakes.length,     done: medTakes.filter(t => t.status === 'done').length,     color: '#4e73df' },
-                                    { label: 'Mesures',      val: measureTakes.length, done: measureTakes.filter(t => t.status === 'done').length, color: '#6f42c1' },
+                                    { label: 'Médicaments', val: medTakes.length,     done: medTakes.filter(t => t.status === 'done').length,     color: '#4e73df' },
+                                    { label: 'Mesures',     val: measureTakes.length, done: measureTakes.filter(t => t.status === 'done').length, color: '#6f42c1' },
                                 ].map((row, i) => (
                                     <div key={i} className="d-flex align-items-center gap-3">
                                         <div className="rounded-circle flex-shrink-0" style={{ width: 8, height: 8, background: row.color }} />
@@ -678,7 +773,6 @@ const Dashboard = () => {
                                     </div>
                                 ))}
                             </div>
-
                             {activeDayStats.pct !== null && (
                                 <div className="mt-3 p-3 rounded-3 text-center" style={{ background: `${pctColor(activeDayStats.pct)}12` }}>
                                     <div className="fw-bold" style={{ fontSize: 28, color: pctColor(activeDayStats.pct) }}>{activeDayStats.pct}%</div>
@@ -690,7 +784,6 @@ const Dashboard = () => {
                 </div>
             </div>
 
-            {/* ── FAB ── */}
             <div className="position-fixed" style={{ bottom: 30, right: 30, zIndex: 1050 }}>
                 {fabOpen && (
                     <div className="d-flex flex-column gap-2 mb-3 align-items-end">
@@ -703,7 +796,7 @@ const Dashboard = () => {
                         </button>
                         <button onClick={() => { navigate('/Mesure'); setFabOpen(false); }}
                             className="btn bg-white shadow rounded-pill px-4 py-2 fw-bold d-flex align-items-center gap-2 border-0">
-                            <span className="rounded-circle d-flex align-items-center justify-content-center bg-purple text-white" style={{ width: 28, height: 28, background: '#6f42c1' }}>
+                            <span className="rounded-circle d-flex align-items-center justify-content-center text-white" style={{ width: 28, height: 28, background: '#6f42c1' }}>
                                 <i className="bi bi-clipboard2-pulse" style={{ fontSize: 12 }} />
                             </span>
                             Ajouter une mesure
@@ -717,12 +810,22 @@ const Dashboard = () => {
                 </button>
             </div>
 
-            {/* ── MODAL SAISIE MESURE ── */}
+            {/* Modal saisie mesure */}
             {saisieModal && (
                 <SaisieModal
                     mesure={saisieModal}
                     onClose={() => setSaisieModal(null)}
                     onSave={saveMeasure}
+                />
+            )}
+
+            {/* Modal confirmation notification push */}
+            {notifModal && (
+                <NotifModal
+                    notifModal={notifModal}
+                    onClose={() => setNotifModal(null)}
+                    onConfirmer={handleConfirmerPrise}
+                    onSaisir={handleSaisirMesure}
                 />
             )}
         </div>

@@ -180,9 +180,13 @@ const EditMedication = () => {
       alert("Médicament mis à jour avec succès !");
       navigate('/MedicationList');
     } catch (error) {
-      console.log("Erreur détaillée:", error.response?.data);
-      alert("Erreur : " + JSON.stringify(error.response?.data?.errors ?? error.response?.data?.message));
-    } finally {
+  console.log("Erreur détaillée:", error.response?.data);
+  const errMsg = error.response?.data?.errors 
+    ?? error.response?.data?.message 
+    ?? error.message 
+    ?? "Erreur inconnue";
+  alert("Erreur : " + JSON.stringify(errMsg));
+} finally {
       setSubmitting(false);
     }
   };

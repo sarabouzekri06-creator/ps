@@ -67,6 +67,20 @@ const MesureDashboard = () => {
 
     useEffect(() => { fetchHealthData(); }, [fetchHealthData]);
 
+    // Détecter si on vient d'une notification push
+useEffect(() => {
+  const params = new URLSearchParams(window.location.search);
+  const takeId = params.get('take_id');
+  const action = params.get('action');
+
+  if (takeId && action === 'saisir') {
+    // Attendre que les données soient chargées puis ouvrir le modal
+    if (mesuresData.length > 0) {
+      setSaisieModal(mesuresData[0]); // ouvre le premier par défaut
+    }
+  }
+}, [mesuresData]);
+
     const refreshAndKeepTab = useCallback(async () => {
         const currentTab = activeTab;
         setActiveTab(null);

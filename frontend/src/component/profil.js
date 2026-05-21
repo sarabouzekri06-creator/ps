@@ -37,14 +37,11 @@ export default function Profile() {
     }
   }, []);
 
-  // ── Charger le profil (UN SEUL useEffect) ──────────────────────
+  // ── Charger le profil ──────────────────────────────────────────
   useEffect(() => {
     if (!token) return;
     axios.get(`${API}/user`, config).then(({ data }) => {
-
-      // API retourne { user: {...}, responsables: [...] }
-      const u = data.user || data; // compatibilité si API change
-
+      const u = data.user || data;
       setUser({
         nom:          u.nom               || "",
         prenom:       u.prenom            || "",
@@ -53,24 +50,18 @@ export default function Profile() {
         maladies:     u.maladies          || "",
         notification: u.notification_type || "patient",
       });
-
       if (u.profile_image)
         setProfileImage(`http://localhost:8000/storage/${u.profile_image}`);
-
       if (u.is_profile_complete) {
         setSaved(true);
         setContactEmail(u.contact_alerte_email || "");
       }
-
       if (data.responsables) {
         setResponsables(data.responsables);
       }
-
     }).catch(console.error);
   }, [token]);
 
-
-  
   // ── Test email ─────────────────────────────────────────────────
   const testNotif = async () => {
     try {
@@ -82,7 +73,7 @@ export default function Profile() {
   };
 
   // ── Activer push notifications ─────────────────────────────────
- const activatePush = async () => {
+  const activatePush = async () => {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
       alert('Votre navigateur ne supporte pas les notifications push.');
       return;
@@ -91,8 +82,28 @@ export default function Profile() {
     setPushStatus('loading');
     try {
       console.log("1. Enregistrement du SW...");
+
+      // Enregistrer le service worker
       const reg = await navigator.serviceWorker.register('/sw.js');
-      await navigator.serviceWorker.ready;
+
+      // Attendre que le SW soit vraiment actif (correction du bug)
+      await new Promise((resolve) => {
+        if (reg.active) {
+          // Déjà actif
+          resolve();
+        } else {
+          // En cours d'installation ou en attente
+          const worker = reg.installing || reg.waiting;
+          if (worker) {
+            worker.addEventListener('statechange', function() {
+              if (this.state === 'activated') resolve();
+            });
+          } else {
+            // Attendre que le SW soit prêt
+            navigator.serviceWorker.ready.then(() => resolve());
+          }
+        }
+      });
 
       console.log("2. Demande de permission...");
       const perm = await Notification.requestPermission();
@@ -112,10 +123,17 @@ export default function Profile() {
       }
 
       console.log("4. Tentative d'abonnement...");
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(vapidKey),
-      });
+
+      // Récupérer l'abonnement existant ou en créer un nouveau
+      const registration = await navigator.serviceWorker.ready;
+      let sub = await registration.pushManager.getSubscription();
+
+      if (!sub) {
+        sub = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(vapidKey),
+        });
+      }
 
       console.log("5. Abonnement réussi :", sub);
 
@@ -127,7 +145,7 @@ export default function Profile() {
         endpoint: sub.endpoint,
         keys: {
           p256dh: btoa(String.fromCharCode(...new Uint8Array(sub.getKey('p256dh')))),
-          auth: btoa(String.fromCharCode(...new Uint8Array(sub.getKey('auth')))),
+          auth:   btoa(String.fromCharCode(...new Uint8Array(sub.getKey('auth')))),
         },
       }, config);
 
@@ -140,6 +158,7 @@ export default function Profile() {
       setPushStatus('idle');
     }
   };
+
   // ── Handlers ───────────────────────────────────────────────────
   const handleChange      = (e) => setUser({ ...user, [e.target.name]: e.target.value });
   const handleImageChange = (e) => {
@@ -258,10 +277,7 @@ export default function Profile() {
 
             {/* ── Push Notifications ── */}
             {saved && (
-              <button
-                onClick={activatePush}
-                style={pushBtnStyle}
-              >
+              <button onClick={activatePush} style={pushBtnStyle}>
                 {pushStatus === 'loading' && <span>⏳ Activation…</span>}
                 {pushStatus === 'enabled' && <><i className="bi bi-bell-fill me-2" />Push activées ✅</>}
                 {pushStatus === 'denied'  && <><i className="bi bi-bell-slash me-2" />Bloquées</>}
@@ -321,7 +337,6 @@ export default function Profile() {
                   </div>
                 </div>
 
-                {/* ── Délégation responsable ── */}
                 {user.notification === "responsable" && (
                   <div style={{ marginTop: 20 }}>
                     <div className="pf-divider" />

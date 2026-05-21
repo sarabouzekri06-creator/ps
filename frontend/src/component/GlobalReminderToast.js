@@ -194,19 +194,28 @@ const GlobalReminderToast = () => {
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
-  const handleMedDone = useCallback((notif) => {
+ const handleMedDone = useCallback((notif) => {
     axios.post(`${BASE}/api/takes/${notif.takeId}/done`, {}, { headers: hdrs() })
-    .then(() => dismissToast(notif.id))
+    .then(() => {
+        dismissToast(notif.id);
+        // ✅ Émettre un event pour rafraîchir tous les composants
+        window.dispatchEvent(new CustomEvent('reminder-done', {
+            detail: { type: 'med', takeId: notif.takeId }
+        }));
+    })
     .catch(e => console.error(e));
-  }, [dismissToast]);
-
+}, [dismissToast]);
   const handleMeasureOpen = useCallback((notif) => {
     setSaisieNotif(notif);
   }, []);
 
   const handleMeasureSaved = useCallback((id) => {
     dismissToast(id);
-  }, [dismissToast]);
+    // ✅ Émettre un event pour rafraîchir
+    window.dispatchEvent(new CustomEvent('reminder-done', {
+        detail: { type: 'measure' }
+    }));
+}, [dismissToast]);
 
   if (toasts.length === 0 && !saisieNotif) return null;
 

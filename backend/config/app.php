@@ -12,6 +12,8 @@ return [
     | other UI elements where an application name needs to be displayed.
     |
     */
+    // config/app.php
+'timezone' => env('APP_TIMEZONE', 'Africa/Casablanca'),
 
     'name' => env('APP_NAME', 'Laravel'),
 
@@ -65,7 +67,6 @@ return [
     |
     */
 
-    'timezone' => 'UTC',
 
     /*
     |--------------------------------------------------------------------------

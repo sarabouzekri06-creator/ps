@@ -18,19 +18,15 @@ Route::get('/statut-isag', fn() => response()->json([
     'date'   => now()->format('d/m/Y H:i'),
 ]));
 
-// Route de test — à supprimer après
-Route::middleware('auth:sanctum')->get('/test-notif', function (Request $request) {
-    app(\App\Services\PushNotificationService::class)->sendToPatient(
-        patientId: $request->user()->id,
-        title:     '🧪 Test notification',
-        body:      'Si tu reçois cet email, les notifications fonctionnent !',
-        url:       '/'
+// Route de test push — supprimer avant de déployer
+Route::get('/test-push', function () {
+    \App\Helpers\NotificationHelper::envoyerPush(
+        'sarabouzekri.06@gmail.com',
+        '🔔 Test Push',
+        'Le push fonctionne !'
     );
-    return response()->json(['message' => 'Notification envoyée !']);
+    return 'Push envoyé';
 });
-
-
-
 
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login',    [AuthController::class, 'login']);
@@ -38,15 +34,17 @@ Route::post('/login',    [AuthController::class, 'login']);
 // ── Protégé ───────────────────────────────────────────────────────
 Route::middleware('auth:sanctum')->group(function () {
 
+
+
     // ── Auth ──
     Route::post('/logout',      [AuthController::class, 'logout']);
-    Route::get('/user',         [AuthController::class, 'me']);
-    Route::post('/user/update', [AuthController::class, 'updateProfile']);
+    Route::get  ('/user',       [AuthController::class, 'me']);
+    Route::post ('/user/update',[AuthController::class, 'updateProfile']);
 
     // ── Dashboard ──
-    Route::get('/dashboard-data',      [DashboardController::class, 'getDashboardData']);
-    Route::post('/takes/{id}/done',    [DashboardController::class, 'markTakeAsDone']);
-    Route::post('/measures/{id}/done', [DashboardController::class, 'markMeasureAsDone']);
+    Route::get  ('/dashboard-data',      [DashboardController::class, 'getDashboardData']);
+    Route::post ('/takes/{id}/done',     [DashboardController::class, 'markTakeAsDone']);
+    Route::post ('/measures/{id}/done',  [DashboardController::class, 'markMeasureAsDone']);
 
     // ── Médicaments ──
     Route::get    ('/medications',              [MedicationController::class, 'index']);
@@ -75,7 +73,52 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/push/subscribe', [PushSubscriptionController::class, 'store']);
 
     // ── Responsables ──
-    Route::get    ('/responsables',        [ResponsablePatientController::class, 'index']);
-    Route::post   ('/responsables',        [ResponsablePatientController::class, 'store']);
-    Route::patch  ('/responsables/{id}',   [ResponsablePatientController::class, 'toggle']);
+    Route::get   ('/responsables',      [ResponsablePatientController::class, 'index']);
+    Route::post  ('/responsables',      [ResponsablePatientController::class, 'store']);
+    Route::patch ('/responsables/{id}', [ResponsablePatientController::class, 'toggle']);
+
+    // ── Confirmer prise depuis notification push ──
+    // Quand user clique "Pris" dans la notification
+    Route::post('/medicaments/{takeId}/confirmer', function ($takeId) {
+        $take = \App\Models\MediTake::find($takeId);
+        if (!$take) return response()->json(['error' => 'Not found'], 404);
+
+        // Marquer comme pris (même chose que le bouton "Pris" du dashboard)
+        $take->update(['status' => 'done']);
+
+        // Supprimer le manquement s'il existe
+        \App\Models\Manquement::where('patient_id', auth()->id())
+            ->where('type',   'medicament')
+            ->where('ref_id', $takeId)
+            ->whereDate('date', today())
+            ->delete();
+
+        return response()->json(['message' => 'Prise confirmée']);
+    });
+
+    // ── Récupérer la mesure depuis take_id (pour ouvrir modal depuis notification) ──
+    Route::get('/measure-take/{takeId}', function ($takeId) {
+        $take = \App\Models\MeasureTake::with('measure')->find($takeId);
+        if (!$take) return response()->json(null, 404);
+        return response()->json($take->measure);
+    });
+
+// ── Test email ──
+Route::get('/test-notif', function (Request $request) {
+    \App\Helpers\NotificationHelper::envoyerEmail(
+        $request->user()->email,
+        'Test notification',
+        "Bonjour,\n\nCeci est un email de test.\n\nL'équipe MediAlert"
+    );
+    return response()->json(['message' => 'Email envoyé !']);
+});
+
+
+
+
+
+
+
+
+
 });

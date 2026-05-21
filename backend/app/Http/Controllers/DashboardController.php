@@ -13,7 +13,6 @@ use Illuminate\Support\Facades\Auth;
 
 class DashboardController extends Controller
 {
-    // ── 1. Dashboard Data ─────────────────────────────────────────────────
     public function getDashboardData(Request $request)
     {
         $userId = Auth::id();
@@ -24,11 +23,13 @@ class DashboardController extends Controller
             ->where('is_active', true)
             ->get()
             ->map(function ($med) use ($date, $userId) {
+
                 $takes = $med->takes->map(function ($take) use ($date, $userId) {
                     $log = MedicationTakeLog::where('take_id', $take->id)
                         ->where('user_id', $userId)
-                        ->whereDate('taken_at', $date)
+                        ->whereDate('created_at', $date)
                         ->first();
+
                     return [
                         'id'        => $take->id,
                         'take_time' => $take->take_time,
@@ -38,6 +39,7 @@ class DashboardController extends Controller
                         'status'    => $log ? 'done' : 'pending',
                     ];
                 });
+
                 return [
                     'id'              => $med->id,
                     'medication_name' => $med->medication_name,
@@ -58,16 +60,21 @@ class DashboardController extends Controller
             ->where('user_id', $userId)
             ->get()
             ->map(function ($mes) use ($date) {
-                $dateShort   = \Carbon\Carbon::parse($date)->format('d/m');
-                $hasMeasured = $mes->history
-                    ->filter(fn($h) => \Carbon\Carbon::parse($h->created_at)->format('d/m') === $dateShort)
-                    ->isNotEmpty();
-                $takes = $mes->takes->map(fn($take) => [
-                    'id'        => $take->id,
-                    'take_time' => $take->take_time,
-                    'label'     => $take->label,
-                    'status'    => $hasMeasured ? 'done' : 'pending',
-                ]);
+
+                // ✅ Si un résultat existe ce jour → done (même logique que médicaments)
+                $hasMeasuredToday = $mes->history->contains(
+                    fn($h) => \Carbon\Carbon::parse($h->created_at)->toDateString() === $date
+                );
+
+                $takes = $mes->takes->map(function ($take) use ($hasMeasuredToday) {
+                    return [
+                        'id'        => $take->id,
+                        'take_time' => $take->take_time,
+                        'label'     => $take->label,
+                        'status'    => $hasMeasuredToday ? 'done' : 'pending',
+                    ];
+                });
+
                 return [
                     'id'             => $mes->id,
                     'disease_name'   => $mes->disease_name,
@@ -77,8 +84,9 @@ class DashboardController extends Controller
                     'frequency_days' => $mes->notification
                         ? json_decode($mes->notification->frequency_details, true)
                         : null,
-                    'takes'   => $takes,
-                    'history' => $mes->history->map(fn($h) => [
+                    'start_day'      => optional($mes->notification)->start_day,
+                    'takes'          => $takes,
+                    'history'        => $mes->history->map(fn($h) => [
                         'day'    => \Carbon\Carbon::parse($h->created_at)->format('d/m'),
                         'valeur' => (float) $h->value,
                     ]),
@@ -86,14 +94,14 @@ class DashboardController extends Controller
             });
 
         return response()->json([
-            'medications'  => $medications,
-            'measures'     => $measures,
-            'appointments' => [],
-            'lastTension'  => '—',
+            'medications'     => $medications,
+            'measures'        => $measures,
+            'appointments'    => [],
+            'lastTension'     => '—',
+            'user_created_at' => Auth::user()->created_at->toDateString(),
         ]);
     }
 
-    // ── 2. Marquer une prise médicament comme faite ───────────────────────
     public function markTakeAsDone(Request $request, $takeId)
     {
         try {
@@ -106,7 +114,7 @@ class DashboardController extends Controller
 
             $alreadyDone = MedicationTakeLog::where('take_id', $takeId)
                 ->where('user_id', $userId)
-                ->whereDate('taken_at', $today)
+                ->whereDate('created_at', $today)
                 ->exists();
 
             if ($alreadyDone) {
@@ -116,14 +124,13 @@ class DashboardController extends Controller
             MedicationTakeLog::create([
                 'take_id'  => $takeId,
                 'user_id'  => $userId,
-                'taken_at' => $today,
+                'taken_at' => now(),
                 'status'   => 'done',
             ]);
 
             if ($take->medication) {
                 $take->medication->decrement('current_stock', $take->dose ?? 1);
 
-                // ── Notif : prise confirmée ──────────────────────────────
                 app(PushNotificationService::class)->sendToPatient(
                     patientId: $userId,
                     title:     '✅ Prise confirmée',
@@ -131,7 +138,6 @@ class DashboardController extends Controller
                     url:       '/medicaments'
                 );
 
-                // ── Notif : stock faible ─────────────────────────────────
                 $stockRestant = $take->medication->current_stock - ($take->dose ?? 1);
                 $alertStock   = $take->medication->low_stock_alert ?? 5;
 
@@ -147,7 +153,7 @@ class DashboardController extends Controller
 
             return response()->json([
                 'message'  => 'Prise enregistrée pour ' . $today,
-                'taken_at' => $today,
+                'taken_at' => now(),
             ], 200);
 
         } catch (\Exception $e) {
@@ -155,7 +161,6 @@ class DashboardController extends Controller
         }
     }
 
-    // ── 3. Marquer une mesure comme faite ────────────────────────────────
     public function markMeasureAsDone(Request $request, $id)
     {
         try {
@@ -168,7 +173,6 @@ class DashboardController extends Controller
                 'note'       => $request->note  ?? null,
             ]);
 
-            // ── Notif : mesure enregistrée ───────────────────────────────
             app(PushNotificationService::class)->sendToPatient(
                 patientId: $userId,
                 title:     '📊 Mesure enregistrée',
@@ -176,7 +180,6 @@ class DashboardController extends Controller
                 url:       '/mesures'
             );
 
-            // ── Notif : valeur hors cible ────────────────────────────────
             if ($measure->max_target && $request->value > $measure->max_target) {
                 app(PushNotificationService::class)->sendToPatient(
                     patientId: $userId,
@@ -202,7 +205,6 @@ class DashboardController extends Controller
         }
     }
 
-    // ── 4. Liste simple ───────────────────────────────────────────────────
     public function index()
     {
         $medications = Medication::with('takes')
