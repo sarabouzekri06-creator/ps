@@ -3,7 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\ResponsablePatient;
-use App\Services\PushNotificationService;
+// use App\Services\PushNotificationService;
 use Illuminate\Http\Request;
 
 class ResponsablePatientController extends Controller
@@ -18,29 +18,50 @@ class ResponsablePatientController extends Controller
         );
     }
 
-    // Ajouter un responsable remplaçant (max 2)
+    // Ajouter le responsable remplaçant (ordre 2 uniquement)
     public function store(Request $request)
     {
         $request->validate([
-            'email_responsable' => 'required|email',
+            'telephone_responsable' => 'required|string',
         ]);
 
-        $count = ResponsablePatient::where('patient_id', auth()->id())->count();
+        // Vérifier si un remplaçant (ordre 2) existe déjà
+        $exists = ResponsablePatient::where('patient_id', auth()->id())
+                                     ->where('ordre', 2)
+                                     ->first();
 
-        if ($count >= 2) {
+        if ($exists) {
             return response()->json(
-                ['message' => 'Maximum 2 responsables autorisés'], 422
+                ['message' => 'Un remplaçant existe déjà. Modifiez-le plutôt.'], 422
             );
         }
 
         $resp = ResponsablePatient::create([
-            'patient_id'        => auth()->id(),
-            'email_responsable' => $request->email_responsable,
-            'ordre'             => $count + 1,
-            'is_active'         => true,
+            'patient_id'            => auth()->id(),
+            'telephone_responsable' => $request->telephone_responsable,
+            'ordre'                 => 2,
+            'is_active'             => true,
         ]);
 
         return response()->json($resp, 201);
+    }
+
+    // Modifier le numéro du responsable remplaçant
+    public function update(Request $request, $id)
+    {
+        $request->validate([
+            'telephone_responsable' => 'required|string',
+        ]);
+
+        $resp = ResponsablePatient::where('id',         $id)
+                                   ->where('patient_id', auth()->id())
+                                   ->firstOrFail();
+
+        $resp->update([
+            'telephone_responsable' => $request->telephone_responsable,
+        ]);
+
+        return response()->json($resp);
     }
 
     // Activer / désactiver un responsable
@@ -52,18 +73,21 @@ class ResponsablePatientController extends Controller
 
         $resp->update(['is_active' => !$resp->is_active]);
 
-        $push    = app(PushNotificationService::class);
-        $patient = auth()->user();
 
-        $push->sendToEmail(
-            $resp->email_responsable,
-            $resp->is_active ? '✅ Vous êtes maintenant actif' : '⏸ Vous avez été désactivé',
-            $resp->is_active
-                ? "Vous recevrez les notifications de {$patient->prenom} {$patient->nom}"
-                : "Vous ne recevrez plus les notifications de {$patient->prenom} {$patient->nom}",
-            '/'
-        );
 
         return response()->json($resp);
+    }
+
+    // Supprimer le responsable remplaçant (ordre 2 uniquement)
+    public function destroy($id)
+    {
+        $resp = ResponsablePatient::where('id',         $id)
+                                   ->where('patient_id', auth()->id())
+                                   ->where('ordre',      2)
+                                   ->firstOrFail();
+
+        $resp->delete();
+
+        return response()->json(['message' => 'Responsable remplaçant supprimé.']);
     }
 }

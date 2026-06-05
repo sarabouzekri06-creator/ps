@@ -14,21 +14,31 @@ class MedicationController extends Controller
 {
     // ── 1. Liste des médicaments ──────────────────────────────────────────
     public function index(Request $request)
-    {
-        try {
-            $medications = Medication::with('takes')
-                ->where('user_id', Auth::id())
-                ->get();
+{
+    try {
+        $medications = Medication::with(['takes', 'notification']) // ← ajouter 'notification'
+            ->where('user_id', Auth::id())
+            ->get()
+            ->map(function ($med) {
+                if ($med->notification) {
+                    $fd = $med->notification->frequency_details;
+                    $med->frequency_type    = $med->notification->frequency_type;
+                    $med->frequency_details = is_string($fd) ? json_decode($fd, true) : $fd;
+                    $med->number_of_days    = $med->notification->number_of_days;
+                    $med->start_day         = $med->notification->start_day;
+                }
+                return $med;
+            });
 
-            return response()->json($medications);
+        return response()->json($medications);
 
-        } catch (\Exception $e) {
-            return response()->json([
-                'error'   => 'Erreur lors de la lecture des données',
-                'message' => $e->getMessage(),
-            ], 500);
-        }
+    } catch (\Exception $e) {
+        return response()->json([
+            'error'   => 'Erreur lors de la lecture des données',
+            'message' => $e->getMessage(),
+        ], 500);
     }
+}
 
     // ── 2. Détails d'un médicament ────────────────────────────────────────
     public function show($id)

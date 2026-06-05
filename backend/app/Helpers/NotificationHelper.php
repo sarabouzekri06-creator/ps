@@ -1,90 +1,56 @@
 <?php
+// app/Helpers/NotificationHelper.php
 
 namespace App\Helpers;
 
-use App\Models\PushSubscription;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
-use Minishlink\WebPush\WebPush;
-use Minishlink\WebPush\Subscription;
-use GuzzleHttp\Client;
+use Twilio\Rest\Client;
 
 class NotificationHelper
 {
-
-    public static function envoyerPush($email, $titre, $message, $image = null, $url = '/', $actions = [])
+    // ── Envoyer un message WhatsApp ───────────────────────────────
+    public static function envoyerWhatsApp($telephone, $message)
     {
-        $abonnements = PushSubscription::where('email', $email)->get();
-
-        if ($abonnements->isEmpty()) {
-            Log::info("Aucun abonnement push pour : $email");
+         $telephone = str_replace(' ', '', $telephone);
+        if (!$telephone) {
+            Log::info("Pas de téléphone pour envoyer WhatsApp");
             return;
         }
 
-        $auth = [
-            'VAPID' => [
-                'subject'    => env('VAPID_SUBJECT', 'mailto:admin@example.com'),
-                'publicKey'  => env('VAPID_PUBLIC_KEY'),
-                'privateKey' => env('VAPID_PRIVATE_KEY'),
-            ],
-        ];
+        try {
+            $twilio = new Client(env('TWILIO_SID'), env('TWILIO_TOKEN'));
 
-        $options = [];
-        if (app()->environment('local')) {
-            $options = ['GuzzleHttp\Client' => new Client(['verify' => false])];
-        }
+            $twilio->messages->create(
+                'whatsapp:' . $telephone,
+                [
+                    'from' => env('TWILIO_WHATSAPP_FROM', 'whatsapp:+14155238886'),
+                    'body' => $message,
+                ]
+            );
 
-        $webpush = new WebPush($auth, $options);
+            Log::info("WhatsApp envoyé à : $telephone");
 
-        $payload = json_encode([
-            'title'   => $titre,
-            'body'    => $message,
-            'icon'    => '/logo192.png',
-            'image'   => $image,
-            'url'     => $url,
-            'actions' => $actions,
-        ]);
-
-        foreach ($abonnements as $sub) {
-            $subscription = Subscription::create([
-                'endpoint'        => $sub->endpoint,
-                'publicKey'       => $sub->public_key,
-                'authToken'       => $sub->auth_token,
-                'contentEncoding' => 'aesgcm',
-            ]);
-
-            $webpush->queueNotification($subscription, $payload);
-        }
-
-        foreach ($webpush->flush() as $report) {
-            if (!$report->isSuccess()) {
-                Log::warning('Push échoué : ' . $report->getReason());
-                if (str_contains($report->getReason() ?? '', '410')) {
-                    PushSubscription::where('endpoint', $report->getEndpoint())->delete();
-                }
-            }
+        } catch (\Exception $e) {
+            Log::error("Erreur WhatsApp : " . $e->getMessage());
         }
     }
 
-    public static function envoyerEmail($email, $sujet, $message)
-    {
-        Mail::raw($message, function ($mail) use ($email, $sujet) {
-            $mail->to($email)->subject('[MediAlert] ' . $sujet);
-        });
-    }
-
-    public static function emailDestinataire($user)
+    // ── Trouver le bon téléphone selon le profil du user ─────────
+    public static function telephoneDestinataire($user)
     {
         if ($user->notification_type === 'patient') {
-            return $user->email;
+            return $user->telephone;
         }
 
+        // Mode responsable : chercher dans responsables_patient
         $responsable = \DB::table('responsables_patient')
             ->where('patient_id', $user->id)
             ->where('is_active', true)
             ->orderBy('ordre')
             ->first();
 
-        return $responsable?->email_responsable ?? $user->email;
+        // Si le responsable a un téléphone → l'utiliser
+        // Sinon → utiliser le téléphone du patient
+        return $responsable?->telephone ?? $user->telephone;
     }
 }

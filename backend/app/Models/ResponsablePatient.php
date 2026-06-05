@@ -10,6 +10,7 @@ class ResponsablePatient extends Model
     protected $fillable = [
         'patient_id',
         'email_responsable',
+         'telephone_responsable',
         'ordre',
         'is_active',
     ];

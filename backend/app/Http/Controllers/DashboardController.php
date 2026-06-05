@@ -8,7 +8,6 @@ use App\Models\MediTake;
 use App\Models\MedicationTakeLog;
 use App\Models\Measure;
 use App\Models\MeasureResult;
-use App\Services\PushNotificationService;
 use Illuminate\Support\Facades\Auth;
 
 class DashboardController extends Controller
@@ -61,17 +60,29 @@ class DashboardController extends Controller
             ->get()
             ->map(function ($mes) use ($date) {
 
-                // ✅ Si un résultat existe ce jour → done (même logique que médicaments)
-                $hasMeasuredToday = $mes->history->contains(
+                // Résultats enregistrés ce jour
+                $resultsCeJour = $mes->history->filter(
                     fn($h) => \Carbon\Carbon::parse($h->created_at)->toDateString() === $date
                 );
 
-                $takes = $mes->takes->map(function ($take) use ($hasMeasuredToday) {
+                $nbResults  = $resultsCeJour->count();
+                $takesCount = $mes->takes->count();
+
+                // Trier les takes par heure
+                $takesSorted = $mes->takes->sortBy('take_time')->values();
+
+                $takes = $takesSorted->map(function ($take, $index) use ($nbResults, $takesCount, $resultsCeJour, $date) {
+
+                    // Logique simple :
+                    // - Si autant de résultats que de takes → tous done
+                    // - Sinon → les N premiers takes (par ordre) sont done selon nb résultats
+                    $isDone = $index < $nbResults;
+
                     return [
                         'id'        => $take->id,
                         'take_time' => $take->take_time,
                         'label'     => $take->label,
-                        'status'    => $hasMeasuredToday ? 'done' : 'pending',
+                        'status'    => $isDone ? 'done' : 'pending',
                     ];
                 });
 
@@ -130,25 +141,6 @@ class DashboardController extends Controller
 
             if ($take->medication) {
                 $take->medication->decrement('current_stock', $take->dose ?? 1);
-
-                app(PushNotificationService::class)->sendToPatient(
-                    patientId: $userId,
-                    title:     '✅ Prise confirmée',
-                    body:      "Vous avez pris : {$take->medication->medication_name}",
-                    url:       '/medicaments'
-                );
-
-                $stockRestant = $take->medication->current_stock - ($take->dose ?? 1);
-                $alertStock   = $take->medication->low_stock_alert ?? 5;
-
-                if ($stockRestant <= $alertStock) {
-                    app(PushNotificationService::class)->sendToPatient(
-                        patientId: $userId,
-                        title:     '⚠️ Stock faible',
-                        body:      "Il reste seulement {$stockRestant} unité(s) de {$take->medication->medication_name}",
-                        url:       '/medicaments'
-                    );
-                }
             }
 
             return response()->json([
@@ -172,31 +164,6 @@ class DashboardController extends Controller
                 'value'      => $request->value ?? 0,
                 'note'       => $request->note  ?? null,
             ]);
-
-            app(PushNotificationService::class)->sendToPatient(
-                patientId: $userId,
-                title:     '📊 Mesure enregistrée',
-                body:      "Votre {$measure->disease_name} : {$request->value} {$measure->unit}",
-                url:       '/mesures'
-            );
-
-            if ($measure->max_target && $request->value > $measure->max_target) {
-                app(PushNotificationService::class)->sendToPatient(
-                    patientId: $userId,
-                    title:     '🚨 Valeur trop élevée',
-                    body:      "{$measure->disease_name} : {$request->value} {$measure->unit} dépasse le seuil max ({$measure->max_target})",
-                    url:       '/mesures'
-                );
-            }
-
-            if ($measure->min_target && $request->value < $measure->min_target) {
-                app(PushNotificationService::class)->sendToPatient(
-                    patientId: $userId,
-                    title:     '🚨 Valeur trop basse',
-                    body:      "{$measure->disease_name} : {$request->value} {$measure->unit} est sous le seuil min ({$measure->min_target})",
-                    url:       '/mesures'
-                );
-            }
 
             return response()->json(['success' => true, 'message' => 'Mesure enregistrée']);
 

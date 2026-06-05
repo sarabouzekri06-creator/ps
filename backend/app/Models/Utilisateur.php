@@ -16,6 +16,7 @@ class Utilisateur extends Authenticatable
         'email', 'password', 'nom', 'prenom', 'age',
         'maladies', 'profile_image', 'notification_type',
         'contact_alerte_email', 'is_profile_complete',
+         'telephone', 
     ];
     protected $hidden = ['password', 'remember_token'];
     protected $casts  = [

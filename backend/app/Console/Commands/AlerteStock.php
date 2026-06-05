@@ -10,7 +10,7 @@ use Illuminate\Console\Command;
 class AlerteStock extends Command
 {
     protected $signature   = 'alerte:stock';
-    protected $description = 'Alerter quand le stock de médicaments est bas';
+    protected $description = 'Alerter par WhatsApp quand le stock est bas';
 
     const SEUIL = 5;
 
@@ -27,25 +27,16 @@ class AlerteStock extends Command
             ->get();
 
         foreach ($medicaments as $med) {
-            $user  = $med->user;
+            $user = $med->user;
             if (!$user) continue;
 
-            $email = NotificationHelper::emailDestinataire($user);
-            $nom   = $med->medication_name;
-            $stock = $med->current_stock;
+            $telephone = NotificationHelper::telephoneDestinataire($user);
+            $nom       = $med->medication_name;
+            $stock     = $med->current_stock;
 
-            // Push
-            NotificationHelper::envoyerPush(
-                $email,
-                '⚠️ Stock bas',
-                "Il vous reste {$stock} dose(s) de {$nom}"
-            );
-
-            // Email
-            NotificationHelper::envoyerEmail(
-                $email,
-                "Stock bas — {$nom}",
-                "Bonjour,\n\nIl vous reste seulement {$stock} dose(s) de « {$nom} ».\n\nPensez à renouveler votre ordonnance.\n\nL'équipe MediAlert"
+            NotificationHelper::envoyerWhatsApp(
+                $telephone,
+                "⚠️ *Stock bas*\n\nIl vous reste seulement *{$stock} dose(s)* de « {$nom} ».\n\nPensez à renouveler votre ordonnance.\n\n_MediAlert_"
             );
 
             $med->update(['stock_alerte_at' => now()]);

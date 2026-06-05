@@ -11,7 +11,7 @@ use Illuminate\Console\Command;
 class RappelMesures extends Command
 {
     protected $signature   = 'rappel:mesures';
-    protected $description = 'Envoyer les rappels pour les mesures';
+    protected $description = 'Envoyer les rappels mesures par WhatsApp';
 
     public function handle()
     {
@@ -29,20 +29,22 @@ class RappelMesures extends Command
             $user = $measure->user;
             if (!$user) continue;
 
-            $email = NotificationHelper::emailDestinataire($user);
-            $nom   = $measure->disease_name;
+            // ── 1. Ne pas envoyer si notif déjà envoyée aujourd'hui ──
+            if ($take->notif_sent_date === today()->toDateString()) continue;
 
-            // URL avec take_id et type=mesure pour ouvrir le modal saisie
-            $url = '/?take_id=' . $take->id . '&type=mesure';
+            $telephone = NotificationHelper::telephoneDestinataire($user);
+            $nom       = $measure->disease_name;
+            $lien      = env('APP_FRONTEND_URL', 'http://localhost:3000') . '/dashboard?take_id=' . $take->id . '&type=measure';
 
-            NotificationHelper::envoyerPush(
-                $email,
-                '📊 ' . $nom,
-                "Heure de prendre votre mesure",
-                null,
-                $url
+            NotificationHelper::envoyerWhatsApp(
+                $telephone,
+                "📊 *Rappel mesure*\n\nHeure de prendre votre mesure : *{$nom}*\n\n👉 Saisir la mesure :\n{$lien}\n\n_MediAlert_"
             );
 
+            // ── 2. Marquer notif comme envoyée aujourd'hui ──
+            $take->update(['notif_sent_date' => today()]);
+
+            // ── 3. Vérifier les manquements ──
             $nbManquements = Manquement::where('patient_id', $user->id)
                 ->where('type',   'mesure')
                 ->where('ref_id', $take->id)
@@ -58,10 +60,9 @@ class RappelMesures extends Command
                     ->exists();
 
                 if (!$dejaEnvoye) {
-                    NotificationHelper::envoyerEmail(
-                        $email,
-                        "Manquements — {$nom}",
-                        "Bonjour,\n\nLa mesure « {$nom} » a été manquée plus de 2 fois cette semaine.\n\nL'équipe MediAlert"
+                    NotificationHelper::envoyerWhatsApp(
+                        $telephone,
+                        "⚠️ *Alerte manquements*\n\n« {$nom} » manquée plus de 2 fois cette semaine.\n\n_MediAlert_"
                     );
 
                     Manquement::where('patient_id', $user->id)

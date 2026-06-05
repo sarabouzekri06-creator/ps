@@ -8,7 +8,6 @@ use App\Http\Controllers\MedicationController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\MeasureController;
 use App\Http\Controllers\MeasureResultController;
-use App\Http\Controllers\PushSubscriptionController;
 use App\Http\Controllers\ResponsablePatientController;
 
 // ── Public ────────────────────────────────────────────────────────
@@ -18,23 +17,11 @@ Route::get('/statut-isag', fn() => response()->json([
     'date'   => now()->format('d/m/Y H:i'),
 ]));
 
-// Route de test push — supprimer avant de déployer
-Route::get('/test-push', function () {
-    \App\Helpers\NotificationHelper::envoyerPush(
-        'sarabouzekri.06@gmail.com',
-        '🔔 Test Push',
-        'Le push fonctionne !'
-    );
-    return 'Push envoyé';
-});
-
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login',    [AuthController::class, 'login']);
 
 // ── Protégé ───────────────────────────────────────────────────────
 Route::middleware('auth:sanctum')->group(function () {
-
-
 
     // ── Auth ──
     Route::post('/logout',      [AuthController::class, 'logout']);
@@ -70,55 +57,66 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete ('/measures/results/{id}', [MeasureResultController::class, 'destroy']);
 
     // ── Push notifications ──
-    Route::post('/push/subscribe', [PushSubscriptionController::class, 'store']);
+    // Route::post('/push/subscribe', [PushSubscriptionController::class, 'store']);
 
     // ── Responsables ──
-    Route::get   ('/responsables',      [ResponsablePatientController::class, 'index']);
-    Route::post  ('/responsables',      [ResponsablePatientController::class, 'store']);
-    Route::patch ('/responsables/{id}', [ResponsablePatientController::class, 'toggle']);
+     Route::get   ('/responsables',              [ResponsablePatientController::class, 'index']);
+    Route::post  ('/responsables',              [ResponsablePatientController::class, 'store']);
+    Route::patch ('/responsables/{id}',         [ResponsablePatientController::class, 'update']);
+    Route::patch ('/responsables/{id}/toggle',  [ResponsablePatientController::class, 'toggle']);
+    Route::delete('/responsables/{id}',         [ResponsablePatientController::class, 'destroy']);
+    // ── Confirmer prise depuis WhatsApp ──
+    // Utilise la même logique que le bouton "Pris" du dashboard
+    Route::post('/medicaments/{takeId}/confirmer', function ($takeId, Request $request) {
+        // Appeler markTakeAsDone du DashboardController
+        $controller = new DashboardController();
+        $response   = $controller->markTakeAsDone($request, $takeId);
 
-    // ── Confirmer prise depuis notification push ──
-    // Quand user clique "Pris" dans la notification
-    Route::post('/medicaments/{takeId}/confirmer', function ($takeId) {
-        $take = \App\Models\MediTake::find($takeId);
-        if (!$take) return response()->json(['error' => 'Not found'], 404);
+        // Envoyer WhatsApp confirmation
+        $take = \App\Models\MediTake::with('medication.user')->find($takeId);
+        if ($take && $take->medication && $take->medication->user) {
+            $user      = $take->medication->user;
+            $telephone = \App\Helpers\NotificationHelper::telephoneDestinataire($user);
+            $nom       = $take->medication->medication_name;
 
-        // Marquer comme pris (même chose que le bouton "Pris" du dashboard)
-        $take->update(['status' => 'done']);
+            \App\Helpers\NotificationHelper::envoyerWhatsApp(
+                $telephone,
+                "✅ *Prise confirmée !*\n\n« {$nom} » enregistré avec succès.\n\n_MediAlert_"
+            );
+        }
 
-        // Supprimer le manquement s'il existe
-        \App\Models\Manquement::where('patient_id', auth()->id())
-            ->where('type',   'medicament')
-            ->where('ref_id', $takeId)
-            ->whereDate('date', today())
-            ->delete();
-
-        return response()->json(['message' => 'Prise confirmée']);
+        return $response;
     });
 
-    // ── Récupérer la mesure depuis take_id (pour ouvrir modal depuis notification) ──
+    // ── Récupérer la mesure depuis take_id ──
     Route::get('/measure-take/{takeId}', function ($takeId) {
         $take = \App\Models\MeasureTake::with('measure')->find($takeId);
         if (!$take) return response()->json(null, 404);
         return response()->json($take->measure);
     });
 
-// ── Test email ──
-Route::get('/test-notif', function (Request $request) {
-    \App\Helpers\NotificationHelper::envoyerEmail(
-        $request->user()->email,
-        'Test notification',
-        "Bonjour,\n\nCeci est un email de test.\n\nL'équipe MediAlert"
-    );
-    return response()->json(['message' => 'Email envoyé !']);
-});
+    // ── Confirmation mesure → envoyer WhatsApp ──
+    Route::post('/measures/result/confirm', function (Request $request) {
+        $user      = $request->user();
+        $telephone = \App\Helpers\NotificationHelper::telephoneDestinataire($user);
+        $nom       = $request->nom ?? 'Mesure';
 
+        \App\Helpers\NotificationHelper::envoyerWhatsApp(
+            $telephone,
+            "✅ *Mesure enregistrée !*\n\n« {$nom} » enregistrée avec succès.\n\n_MediAlert_"
+        );
 
+        return response()->json(['message' => 'WhatsApp envoyé']);
+    });
 
-
-
-
-
-
+    // ── Test WhatsApp ──
+    Route::get('/test-notif', function (Request $request) {
+        $user = $request->user();
+        \App\Helpers\NotificationHelper::envoyerWhatsApp(
+            $user->telephone,
+            "✅ Test WhatsApp\n\nVos notifications fonctionnent !\n\n_MediAlert_"
+        );
+        return response()->json(['message' => 'WhatsApp envoyé !']);
+    });
 
 });

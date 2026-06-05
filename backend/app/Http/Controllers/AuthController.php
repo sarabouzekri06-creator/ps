@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\Utilisateur;
 use App\Models\ResponsablePatient;
-use App\Services\PushNotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
@@ -16,7 +15,7 @@ class AuthController extends Controller
     public function register(Request $request)
     {
         $fields = $request->validate([
-            'email'    => 'required|string|unique:utilisateurs,email', // ← corrigé
+            'email'    => 'required|string|unique:utilisateurs,email',
             'password' => 'required|string|confirmed',
         ]);
 
@@ -61,14 +60,17 @@ class AuthController extends Controller
     {
         $user = $request->user();
 
-        // Charger aussi les responsables si c'est un responsable
         $responsables = ResponsablePatient::where('patient_id', $user->id)
                                            ->orderBy('ordre')
                                            ->get();
 
+        // Séparer responsable principal et remplaçant
+        $responsable2 = $responsables->firstWhere('ordre', 2);
+
         return response()->json([
-            'user'         => $user,
-            'responsables' => $responsables,
+            'user'          => $user,
+            'responsables'  => $responsables,
+            'responsable2'  => $responsable2, // ← utilisé par le frontend
         ]);
     }
 
@@ -80,7 +82,6 @@ class AuthController extends Controller
             $path = $user->profile_image;
 
             if ($request->hasFile('image')) {
-                // Supprimer l'ancienne image
                 if ($path) Storage::disk('public')->delete($path);
                 $path = $request->file('image')->store('profiles', 'public');
             }
@@ -90,22 +91,24 @@ class AuthController extends Controller
                 'prenom'               => $request->prenom,
                 'age'                  => $request->age,
                 'maladies'             => $request->maladies,
+                'telephone'            => $request->telephone,
                 'profile_image'        => $path,
                 'notification_type'    => $request->notificationType,
                 'contact_alerte_email' => $request->contactAlerte,
                 'is_profile_complete'  => true,
             ]);
 
-            // Si c'est un responsable → sauvegarder son email dans responsables_patient
-            if ($request->notificationType === 'responsable' && $request->contactAlerte) {
+            // Si mode responsable, enregistrer le téléphone comme responsable principal
+            if ($request->notificationType === 'responsable' && $request->telephone) {
                 ResponsablePatient::updateOrCreate(
                     [
                         'patient_id' => $user->id,
                         'ordre'      => 1,
                     ],
                     [
-                        'email_responsable' => $request->contactAlerte,
-                        'is_active'         => true,
+                        'telephone_responsable' => $request->telephone,
+                        'email_responsable'     => $request->contactAlerte ?? null,
+                        'is_active'             => true,
                     ]
                 );
             }

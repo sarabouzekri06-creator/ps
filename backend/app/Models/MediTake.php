@@ -11,7 +11,7 @@ class MediTake extends Model
     // ne correspond pas au pluriel automatique (medi_takes)
     protected $table = 'medication_takes';
 
-    protected $fillable = ['medication_id', 'take_time', 'dose', 'unit','status'];
+    protected $fillable = ['medication_id', 'take_time', 'dose', 'unit','status', 'notif_sent_date'];
 
     /**
      * Un horaire de prise appartient à un Médicament

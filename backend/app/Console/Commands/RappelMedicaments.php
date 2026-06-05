@@ -1,16 +1,18 @@
 <?php
+// app/Console/Commands/RappelMedicaments.php
 
 namespace App\Console\Commands;
 
 use App\Helpers\NotificationHelper;
 use App\Models\Manquement;
 use App\Models\MediTake;
+use App\Models\MedicationTakeLog;
 use Illuminate\Console\Command;
 
 class RappelMedicaments extends Command
 {
     protected $signature   = 'rappel:medicaments';
-    protected $description = 'Envoyer les rappels pour les médicaments';
+    protected $description = 'Envoyer les rappels médicaments par WhatsApp';
 
     public function handle()
     {
@@ -28,24 +30,30 @@ class RappelMedicaments extends Command
             $user = $medication->user;
             if (!$user) continue;
 
-            $email = NotificationHelper::emailDestinataire($user);
-            $nom   = $medication->medication_name;
-            $dose  = $take->dose ? $take->dose . ' ' . $take->unit : '';
+            // ── 1. Ne pas envoyer si notif déjà envoyée aujourd'hui ──
+            if ($take->notif_sent_date === today()->toDateString()) continue;
 
-            $imageUrl = $medication->medication_image
-                ? config('app.url') . '/storage/' . $medication->medication_image
-                : null;
+            // ── 2. Ne pas envoyer si déjà pris aujourd'hui ──
+            $dejaConfirme = MedicationTakeLog::where('take_id', $take->id)
+                ->where('user_id', $user->id)
+                ->whereDate('created_at', today())
+                ->exists();
+            if ($dejaConfirme) continue;
 
-            $url = '/?take_id=' . $take->id . '&type=medicament';
+            $telephone = NotificationHelper::telephoneDestinataire($user);
+            $nom       = $medication->medication_name;
+            $dose      = $take->dose ? $take->dose . ' ' . $take->unit : '';
+            $lien      = env('APP_FRONTEND_URL', 'http://localhost:3000') . '/dashboard?take_id=' . $take->id . '&type=medicament';
 
-            NotificationHelper::envoyerPush(
-                $email,
-                '💊 ' . $nom,
-                "Heure de prendre" . ($dose ? " : {$dose}" : ''),
-                $imageUrl,
-                $url
+            NotificationHelper::envoyerWhatsApp(
+                $telephone,
+                "💊 *Rappel médicament*\n\nHeure de prendre : *{$nom}*" . ($dose ? "\nDose : {$dose}" : '') . "\n\n👉 Confirmer la prise :\n" . $lien . "\n\n_MediAlert_"
             );
 
+            // ── 3. Marquer notif comme envoyée aujourd'hui ──
+            $take->update(['notif_sent_date' => today()]);
+
+            // ── 4. Vérifier les manquements ──
             $nbManquements = Manquement::where('patient_id', $user->id)
                 ->where('type',   'medicament')
                 ->where('ref_id', $take->id)
@@ -61,10 +69,9 @@ class RappelMedicaments extends Command
                     ->exists();
 
                 if (!$dejaEnvoye) {
-                    NotificationHelper::envoyerEmail(
-                        $email,
-                        "Manquements — {$nom}",
-                        "Bonjour,\n\nLe médicament « {$nom} » a été manqué plus de 2 fois cette semaine.\n\nL'équipe MediAlert"
+                    NotificationHelper::envoyerWhatsApp(
+                        $telephone,
+                        "⚠️ *Alerte manquements*\n\n« {$nom} » manqué plus de 2 fois cette semaine.\n\n_MediAlert_"
                     );
 
                     Manquement::where('patient_id', $user->id)

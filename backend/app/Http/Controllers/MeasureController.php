@@ -12,15 +12,25 @@ use Illuminate\Support\Facades\DB;
 class MeasureController extends Controller
 {
     // ── 1. Liste des mesures ──────────────────────────────────────────────
-    public function index(Request $request)
-    {
-        $measures = Measure::where('user_id', $request->user()->id)
-            ->with('takes')
-            ->orderBy('created_at', 'desc')
-            ->get();
+   public function index(Request $request)
+{
+    $measures = Measure::where('user_id', $request->user()->id)
+        ->with(['takes', 'notification']) // ← ajouter 'notification'
+        ->orderBy('created_at', 'desc')
+        ->get()
+        ->map(function ($mes) {
+            if ($mes->notification) {
+                $fd = $mes->notification->frequency_details;
+                $mes->frequency_type    = $mes->notification->frequency_type;
+                $mes->frequency_details = is_string($fd) ? json_decode($fd, true) : $fd;
+                $mes->number_of_days    = $mes->notification->number_of_days;
+                $mes->start_day         = $mes->notification->start_day;
+            }
+            return $mes;
+        });
 
-        return response()->json($measures);
-    }
+    return response()->json($measures);
+}
 
     // ── 2. Détails d'une mesure ───────────────────────────────────────────
     public function show($id)

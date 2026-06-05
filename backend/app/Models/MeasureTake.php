@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class MeasureTake extends Model
 {
-    protected $fillable = ['measure_id', 'take_time', 'label'];
+    protected $fillable = ['measure_id', 'take_time', 'label', 'notif_sent_date'];
 
 
 
