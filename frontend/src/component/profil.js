@@ -5,162 +5,138 @@ import "./profil.css";
 const API = "http://localhost:8000/api";
 
 const urlBase64ToUint8Array = (base64String) => {
-  const padding = '='.repeat((4 - base64String.length % 4) % 4);
-  const base64  = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-  const raw     = window.atob(base64);
-  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = window.atob(base64);
+  return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
 };
 
 export default function Profile() {
   const [user, setUser] = useState({
-    nom: "", prenom: "", email: "", age: "", maladies: "", notification: "patient"
+    nom: "", prenom: "", email: "", age: "", maladies: "",
+    telephone: "", notification: "patient",
   });
-  const [contactEmail,  setContactEmail]  = useState("");
-  const [showModal,     setShowModal]     = useState(false);
-  const [saved,         setSaved]         = useState(false);
-  const [profileImage,  setProfileImage]  = useState(null);
-  const [imageFile,     setImageFile]     = useState(null);
-  const [saving,        setSaving]        = useState(false);
-  const [responsables,  setResponsables]  = useState([]);
-  const [showRespForm,  setShowRespForm]  = useState(false);
-  const [newRespEmail,  setNewRespEmail]  = useState("");
-  const [pushStatus,    setPushStatus]    = useState('idle');
+  const [telephone, setTelephone] = useState("");
+  const [showModal, setShowModal] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [profileImage, setProfileImage] = useState(null);
+  const [imageFile, setImageFile] = useState(null);
+  const [saving, setSaving] = useState(false);
 
-  const token  = localStorage.getItem("token");
+  // Responsable 2 state
+  const [resp2, setResp2] = useState(null); // { id, telephone, is_active }
+  const [showResp2Form, setShowResp2Form] = useState(false);
+  const [resp2Phone, setResp2Phone] = useState("");
+  const [editingResp2, setEditingResp2] = useState(false);
+  const [savingResp2, setSavingResp2] = useState(false);
+
+  const [pushStatus, setPushStatus] = useState("idle");
+
+  const token = localStorage.getItem("token");
   const config = { headers: { Authorization: `Bearer ${token}` } };
 
-  // ── Vérifier permission push au chargement ─────────────────────
   useEffect(() => {
-    if (typeof Notification !== 'undefined') {
-      if (Notification.permission === 'granted') setPushStatus('enabled');
-      if (Notification.permission === 'denied')  setPushStatus('denied');
+    if (typeof Notification !== "undefined") {
+      if (Notification.permission === "granted") setPushStatus("enabled");
+      if (Notification.permission === "denied") setPushStatus("denied");
     }
   }, []);
 
-  // ── Charger le profil ──────────────────────────────────────────
   useEffect(() => {
     if (!token) return;
     axios.get(`${API}/user`, config).then(({ data }) => {
       const u = data.user || data;
       setUser({
-        nom:          u.nom               || "",
-        prenom:       u.prenom            || "",
-        email:        u.email             || "",
-        age:          u.age               || "",
-        maladies:     u.maladies          || "",
+        nom: u.nom || "",
+        prenom: u.prenom || "",
+        email: u.email || "",
+        age: u.age || "",
+        maladies: u.maladies || "",
+        telephone: u.telephone || "",
         notification: u.notification_type || "patient",
       });
       if (u.profile_image)
         setProfileImage(`http://localhost:8000/storage/${u.profile_image}`);
       if (u.is_profile_complete) {
         setSaved(true);
-        setContactEmail(u.contact_alerte_email || "");
+        setTelephone(u.telephone || "");
       }
-      if (data.responsables) {
-        setResponsables(data.responsables);
+      // Responsable 2 (remplaçant)
+      if (data.responsable2) {
+        setResp2(data.responsable2);
       }
     }).catch(console.error);
   }, [token]);
 
-  // ── Test email ─────────────────────────────────────────────────
   const testNotif = async () => {
     try {
       await axios.get(`${API}/test-notif`, config);
-      alert("✅ Notif envoyée ! Vérifie ton email : " + contactEmail);
+      alert("✅ Test envoyé !");
     } catch (err) {
       alert("❌ Erreur : " + (err.response?.data?.message || "Erreur serveur"));
     }
   };
 
-  // ── Activer push notifications ─────────────────────────────────
+  const handleLogout = async () => {
+  try {
+    await axios.post(`${API}/logout`, {}, config);
+  } catch (err) {
+    console.error(err);
+  } finally {
+    localStorage.removeItem("token");
+    window.location.href = "/login";
+  }
+};
+
   const activatePush = async () => {
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-      alert('Votre navigateur ne supporte pas les notifications push.');
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+      alert("Votre navigateur ne supporte pas les notifications push.");
       return;
     }
-
-    setPushStatus('loading');
+    setPushStatus("loading");
     try {
-      console.log("1. Enregistrement du SW...");
-
-      // Enregistrer le service worker
-      const reg = await navigator.serviceWorker.register('/sw.js');
-
-      // Attendre que le SW soit vraiment actif (correction du bug)
+      const reg = await navigator.serviceWorker.register("/sw.js");
       await new Promise((resolve) => {
-        if (reg.active) {
-          // Déjà actif
-          resolve();
+        if (reg.active) { resolve(); return; }
+        const worker = reg.installing || reg.waiting;
+        if (worker) {
+          worker.addEventListener("statechange", function () {
+            if (this.state === "activated") resolve();
+          });
         } else {
-          // En cours d'installation ou en attente
-          const worker = reg.installing || reg.waiting;
-          if (worker) {
-            worker.addEventListener('statechange', function() {
-              if (this.state === 'activated') resolve();
-            });
-          } else {
-            // Attendre que le SW soit prêt
-            navigator.serviceWorker.ready.then(() => resolve());
-          }
+          navigator.serviceWorker.ready.then(() => resolve());
         }
       });
-
-      console.log("2. Demande de permission...");
       const perm = await Notification.requestPermission();
-      if (perm !== 'granted') {
-        setPushStatus('denied');
-        console.warn("Permission refusée par l'utilisateur");
-        return;
-      }
-
+      if (perm !== "granted") { setPushStatus("denied"); return; }
       const vapidKey = process.env.REACT_APP_VAPID_PUBLIC_KEY;
-      console.log("3. Clé VAPID récupérée :", vapidKey);
-
-      if (!vapidKey) {
-        alert('❌ Clé VAPID manquante dans .env');
-        setPushStatus('idle');
-        return;
-      }
-
-      console.log("4. Tentative d'abonnement...");
-
-      // Récupérer l'abonnement existant ou en créer un nouveau
+      if (!vapidKey) { alert("❌ Clé VAPID manquante dans .env"); setPushStatus("idle"); return; }
       const registration = await navigator.serviceWorker.ready;
       let sub = await registration.pushManager.getSubscription();
-
       if (!sub) {
         sub = await registration.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey: urlBase64ToUint8Array(vapidKey),
         });
       }
-
-      console.log("5. Abonnement réussi :", sub);
-
-      const emailPourNotif = user.notification === 'patient' ? user.email : contactEmail;
-
-      console.log("6. Envoi au serveur backend...");
       await axios.post(`${API}/push/subscribe`, {
-        email: emailPourNotif,
+        email: user.email,
         endpoint: sub.endpoint,
         keys: {
-          p256dh: btoa(String.fromCharCode(...new Uint8Array(sub.getKey('p256dh')))),
-          auth:   btoa(String.fromCharCode(...new Uint8Array(sub.getKey('auth')))),
+          p256dh: btoa(String.fromCharCode(...new Uint8Array(sub.getKey("p256dh")))),
+          auth: btoa(String.fromCharCode(...new Uint8Array(sub.getKey("auth")))),
         },
       }, config);
-
-      setPushStatus('enabled');
-      alert('✅ Notifications push activées !');
-
+      setPushStatus("enabled");
+      alert("✅ Notifications push activées !");
     } catch (err) {
-      console.error('Erreur détaillée :', err);
-      alert('❌ Erreur : ' + err.message);
-      setPushStatus('idle');
+      console.error("Erreur détaillée :", err);
+      alert("❌ Erreur : " + err.message);
+      setPushStatus("idle");
     }
   };
 
-  // ── Handlers ───────────────────────────────────────────────────
-  const handleChange      = (e) => setUser({ ...user, [e.target.name]: e.target.value });
+  const handleChange = (e) => setUser({ ...user, [e.target.name]: e.target.value });
   const handleImageChange = (e) => {
     const file = e.target.files[0];
     if (file) { setImageFile(file); setProfileImage(URL.createObjectURL(file)); }
@@ -172,19 +148,20 @@ export default function Profile() {
 
   const handleSave = async (e) => {
     e.preventDefault();
-    if (!contactEmail) { setShowModal(true); return; }
+    if (!telephone) { setShowModal(true); return; }
     setSaving(true);
     const fd = new FormData();
-    fd.append("nom",              user.nom);
-    fd.append("prenom",           user.prenom);
-    fd.append("age",              user.age);
-    fd.append("maladies",         user.maladies);
+    fd.append("nom", user.nom);
+    fd.append("prenom", user.prenom);
+    fd.append("age", user.age);
+    fd.append("maladies", user.maladies);
+    fd.append("telephone", telephone);
     fd.append("notificationType", user.notification);
-    fd.append("contactAlerte",    contactEmail);
+    fd.append("contactAlerte", user.email);
     if (imageFile) fd.append("image", imageFile);
     try {
       await axios.post(`${API}/user/update`, fd, {
-        headers: { ...config.headers, "Content-Type": "multipart/form-data" }
+        headers: { ...config.headers, "Content-Type": "multipart/form-data" },
       });
       setSaved(true);
     } catch (err) {
@@ -192,45 +169,80 @@ export default function Profile() {
     } finally { setSaving(false); }
   };
 
-  const toggleResponsable = async (id) => {
-    const { data } = await axios.patch(`${API}/responsables/${id}`, {}, config);
-    setResponsables(prev => prev.map(r => r.id === id ? data : r));
+  // ── Responsable 2 handlers ──
+  const handleAddResp2 = async (e) => {
+    e.preventDefault();
+    if (!resp2Phone.trim()) return;
+    setSavingResp2(true);
+    try {
+      const { data } = await axios.post(`${API}/responsables`, {
+        telephone_responsable: resp2Phone,
+        ordre: 2,
+      }, config);
+      setResp2(data);
+      setResp2Phone("");
+      setShowResp2Form(false);
+    } catch (err) {
+      alert(err.response?.data?.message || "Erreur lors de l'ajout");
+    } finally { setSavingResp2(false); }
   };
 
-  const addResponsable = async (e) => {
+  const handleUpdateResp2 = async (e) => {
     e.preventDefault();
+    if (!resp2Phone.trim()) return;
+    setSavingResp2(true);
     try {
-      const { data } = await axios.post(
-        `${API}/responsables`,
-        { email_responsable: newRespEmail },
-        config
-      );
-      setResponsables(prev => [...prev, data]);
-      setNewRespEmail("");
-      setShowRespForm(false);
+      const { data } = await axios.patch(`${API}/responsables/${resp2.id}`, {
+        telephone_responsable: resp2Phone,
+      }, config);
+      setResp2(data);
+      setResp2Phone("");
+      setEditingResp2(false);
+    } catch (err) {
+      alert(err.response?.data?.message || "Erreur lors de la modification");
+    } finally { setSavingResp2(false); }
+  };
+
+  const handleDeleteResp2 = async () => {
+    if (!window.confirm("Supprimer le responsable remplaçant ?")) return;
+    try {
+      await axios.delete(`${API}/responsables/${resp2.id}`, config);
+      setResp2(null);
+    } catch (err) {
+      alert(err.response?.data?.message || "Erreur lors de la suppression");
+    }
+  };
+
+  const handleToggleResp2 = async () => {
+    try {
+      const { data } = await axios.patch(`${API}/responsables/${resp2.id}/toggle`, {}, config);
+      setResp2(data);
     } catch (err) {
       alert(err.response?.data?.message || "Erreur");
     }
   };
 
-  const initials = `${user.nom?.charAt(0) ?? ""}${user.prenom?.charAt(0) ?? ""}`.toUpperCase() || "?";
+  const startEditResp2 = () => {
+    setResp2Phone(resp2?.telephone || "");
+    setEditingResp2(true);
+  };
 
-  const modalLabel = user.notification === "patient"
-    ? { title: "Votre email", sub: "Les notifications vous seront envoyées.", placeholder: "votre@email.com" }
-    : { title: "Votre email", sub: "Vous recevrez les notifications de votre patient.", placeholder: "responsable@email.com" };
+  const initials =
+    `${user.nom?.charAt(0) ?? ""}${user.prenom?.charAt(0) ?? ""}`.toUpperCase() || "?";
+
+  const modalLabel =
+    user.notification === "patient"
+      ? { title: "Votre numéro WhatsApp", sub: "Vous recevrez les notifications sur WhatsApp." }
+      : { title: "Votre numéro WhatsApp (responsable)", sub: "En tant que responsable, entrez votre propre numéro WhatsApp." };
 
   const pushBtnStyle = {
-    marginTop:    10,
-    border:       `1.5px solid ${pushStatus === 'denied' ? '#ef4444' : '#4361ee'}`,
-    borderRadius: 12,
-    padding:      '8px 16px',
-    background:   pushStatus === 'enabled' ? '#eff2ff' : '#fff',
-    color:        pushStatus === 'denied'  ? '#ef4444' : '#4361ee',
-    cursor:       pushStatus === 'enabled' || pushStatus === 'loading' ? 'default' : 'pointer',
-    fontSize:     13,
-    fontWeight:   600,
-    width:        '100%',
-    opacity:      pushStatus === 'loading' ? 0.7 : 1,
+    marginTop: 10, border: `1.5px solid ${pushStatus === "denied" ? "#ef4444" : "#4361ee"}`,
+    borderRadius: 12, padding: "8px 16px",
+    background: pushStatus === "enabled" ? "#eff2ff" : "#fff",
+    color: pushStatus === "denied" ? "#ef4444" : "#4361ee",
+    cursor: pushStatus === "enabled" || pushStatus === "loading" ? "default" : "pointer",
+    fontSize: 13, fontWeight: 600, width: "100%",
+    opacity: pushStatus === "loading" ? 0.7 : 1,
   };
 
   return (
@@ -261,6 +273,7 @@ export default function Profile() {
 
             {user.age      && <div className="pf-stat"><div className="pf-stat-label">Âge</div><div className="pf-stat-val">{user.age} ans</div></div>}
             {user.maladies && <div className="pf-stat"><div className="pf-stat-label">Condition</div><div className="pf-stat-val">{user.maladies}</div></div>}
+            {telephone     && <div className="pf-stat"><div className="pf-stat-label">WhatsApp</div><div className="pf-stat-val">{telephone}</div></div>}
 
             {saved && (
               <div className="pf-notif-badge">
@@ -275,32 +288,39 @@ export default function Profile() {
               </button>
             )}
 
-            {/* ── Push Notifications ── */}
             {saved && (
               <button onClick={activatePush} style={pushBtnStyle}>
-                {pushStatus === 'loading' && <span>⏳ Activation…</span>}
-                {pushStatus === 'enabled' && <><i className="bi bi-bell-fill me-2" />Push activées ✅</>}
-                {pushStatus === 'denied'  && <><i className="bi bi-bell-slash me-2" />Bloquées</>}
-                {pushStatus === 'idle'    && <><i className="bi bi-bell me-2" />Activer les notifications</>}
+                {pushStatus === "loading" && <span>⏳ Activation…</span>}
+                {pushStatus === "enabled" && <><i className="bi bi-bell-fill me-2" />Push activées ✅</>}
+                {pushStatus === "denied"  && <><i className="bi bi-bell-slash me-2" />Bloquées</>}
+                {pushStatus === "idle"    && <><i className="bi bi-bell me-2" />Activer les notifications</>}
               </button>
             )}
 
-            {pushStatus === 'denied' && (
-              <p style={{ fontSize: 11, color: '#ef4444', marginTop: 6, textAlign: 'center' }}>
+            {pushStatus === "denied" && (
+              <p style={{ fontSize: 11, color: "#ef4444", marginTop: 6, textAlign: "center" }}>
                 Autorisez dans les paramètres du navigateur
               </p>
             )}
 
-            {/* ── Test email ── */}
             {saved && (
               <button onClick={testNotif} style={{
-                marginTop: 10, border: "1.5px solid #10b981", borderRadius: 12,
-                padding: "8px 16px", background: "#f0fdf4", color: "#10b981",
+                marginTop: 10, border: "1.5px solid #25d366", borderRadius: 12,
+                padding: "8px 16px", background: "#f0fdf4", color: "#25d366",
                 cursor: "pointer", fontSize: 13, fontWeight: 600, width: "100%",
               }}>
-                <i className="bi bi-envelope me-2" />Tester l'email
+                <i className="bi bi-whatsapp me-2" />Tester WhatsApp
               </button>
+              
             )}
+
+            <button onClick={handleLogout} style={{
+  marginTop: 10, border: "1.5px solid #ef4444", borderRadius: 12,
+  padding: "8px 16px", background: "#fff1f2", color: "#ef4444",
+  cursor: "pointer", fontSize: 13, fontWeight: 600, width: "100%",
+}}>
+  <i className="bi bi-box-arrow-right me-2" />Déconnexion
+</button>
           </div>
 
           {/* ── MAIN ── */}
@@ -313,7 +333,7 @@ export default function Profile() {
                   {[
                     { label: "Nom",               val: user.nom },
                     { label: "Prénom",             val: user.prenom },
-                    { label: "Email",              val: user.email,                     full: true },
+                    { label: "Email",              val: user.email, full: true },
                     { label: "Âge",                val: user.age ? `${user.age} ans` : "—" },
                     { label: "Condition médicale", val: user.maladies },
                   ].map(({ label, val, full }) => (
@@ -326,84 +346,201 @@ export default function Profile() {
 
                 <div className="pf-divider" />
 
+                {/* ── Notification contact ── */}
                 <div className="pf-info-label" style={{ marginBottom: 10 }}>Contact de notification</div>
                 <div className="pf-notif-box">
                   <div className="pf-notif-icon">
                     <i className={`bi ${user.notification === "patient" ? "bi-person-fill" : "bi-people-fill"}`} />
                   </div>
                   <div>
-                    <div className="pf-radio-text">{user.notification === "patient" ? "Patient" : "Responsable"}</div>
-                    <div className="pf-radio-sub">{contactEmail || "—"}</div>
+                    <div className="pf-radio-text">
+                      {user.notification === "patient" ? "Patient" : "Responsable"}
+                    </div>
+                    <div className="pf-radio-sub">
+                      <i className="bi bi-whatsapp me-1" style={{ color: "#25d366" }} />
+                      {telephone || "—"}
+                    </div>
                   </div>
                 </div>
 
+                {/* ── Section Responsable 2 (visible seulement en mode responsable) ── */}
                 {user.notification === "responsable" && (
                   <div style={{ marginTop: 20 }}>
                     <div className="pf-divider" />
-                    <div className="pf-info-label" style={{ marginBottom: 10 }}>Gestion des responsables</div>
 
-                    {responsables.map(r => (
-                      <div key={r.id} style={{
+                    {/* Header section */}
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                      <div>
+                        <div className="pf-info-label" style={{ marginBottom: 2 }}>
+                          Responsable remplaçant
+                        </div>
+                        <div style={{ fontSize: 12, color: "#94a3b8" }}>
+                          Si vous êtes indisponible, ce responsable prendra le relais
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Responsable 2 — affiché */}
+                    {resp2 && !editingResp2 && (
+                      <div style={{
                         display: "flex", alignItems: "center", justifyContent: "space-between",
-                        padding: "10px 14px", borderRadius: 10, marginBottom: 8,
-                        background: r.is_active ? "#f0fdf4" : "#fafafa",
-                        border: `1.5px solid ${r.is_active ? "#10b981" : "#e2e8f0"}`,
+                        padding: "12px 16px", borderRadius: 12, marginBottom: 8,
+                        background: resp2.is_active ? "#f0fdf4" : "#fafafa",
+                        border: `1.5px solid ${resp2.is_active ? "#10b981" : "#e2e8f0"}`,
                       }}>
                         <div>
-                          <div style={{ fontWeight: 600, fontSize: 13 }}>
-                            {r.ordre === 1 ? "👤 Principal" : "👥 Remplaçant"}
+                          <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 2 }}>
+                            👥 Remplaçant
+                            <span style={{
+                              marginLeft: 8, fontSize: 11, padding: "2px 8px", borderRadius: 20,
+                              background: resp2.is_active ? "#dcfce7" : "#fee2e2",
+                              color: resp2.is_active ? "#10b981" : "#ef4444",
+                            }}>
+                              {resp2.is_active ? "Actif" : "Inactif"}
+                            </span>
                           </div>
-                          <div style={{ fontSize: 12, color: "#64748b" }}>{r.email_responsable}</div>
+                          <div style={{ fontSize: 13, color: "#475569", display: "flex", alignItems: "center", gap: 4 }}>
+                            <i className="bi bi-whatsapp" style={{ color: "#25d366" }} />
+                            {resp2.telephone || resp2.telephone_responsable || "—"}
+                          </div>
                         </div>
-                        <button onClick={() => toggleResponsable(r.id)} style={{
-                          border: "none", borderRadius: 8, padding: "6px 14px",
-                          fontSize: 12, fontWeight: 600, cursor: "pointer",
-                          background: r.is_active ? "#fee2e2" : "#dcfce7",
-                          color: r.is_active ? "#ef4444" : "#10b981",
-                        }}>
-                          {r.is_active ? "Désactiver" : "Activer"}
-                        </button>
-                      </div>
-                    ))}
 
-                    {responsables.length < 2 && !showRespForm && (
-                      <button onClick={() => setShowRespForm(true)} style={{
-                        border: "1.5px dashed #cbd5e1", borderRadius: 10, padding: "10px 16px",
-                        width: "100%", background: "transparent", cursor: "pointer",
-                        fontSize: 13, color: "#64748b", marginTop: 6,
+                        {/* Actions */}
+                        <div style={{ display: "flex", gap: 6 }}>
+                          {/* Activer / Désactiver */}
+                          <button onClick={handleToggleResp2} title={resp2.is_active ? "Désactiver" : "Activer"} style={{
+                            border: "none", borderRadius: 8, padding: "6px 10px", cursor: "pointer", fontSize: 12,
+                            background: resp2.is_active ? "#fee2e2" : "#dcfce7",
+                            color: resp2.is_active ? "#ef4444" : "#10b981",
+                          }}>
+                            <i className={`bi ${resp2.is_active ? "bi-pause-fill" : "bi-play-fill"}`} />
+                          </button>
+                          {/* Modifier */}
+                          <button onClick={startEditResp2} title="Modifier le numéro" style={{
+                            border: "none", borderRadius: 8, padding: "6px 10px", cursor: "pointer", fontSize: 12,
+                            background: "#eff2ff", color: "#4361ee",
+                          }}>
+                            <i className="bi bi-pencil-fill" />
+                          </button>
+                          {/* Supprimer */}
+                          <button onClick={handleDeleteResp2} title="Supprimer" style={{
+                            border: "none", borderRadius: 8, padding: "6px 10px", cursor: "pointer", fontSize: 12,
+                            background: "#fff1f2", color: "#ef4444",
+                          }}>
+                            <i className="bi bi-trash-fill" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Formulaire modification responsable 2 */}
+                    {resp2 && editingResp2 && (
+                      <div style={{
+                        padding: "14px 16px", borderRadius: 12, marginBottom: 8,
+                        background: "#f8fafc", border: "1.5px solid #4361ee",
                       }}>
-                        <i className="bi bi-plus-circle me-2" />Ajouter un responsable remplaçant
+                        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, color: "#4361ee" }}>
+                          <i className="bi bi-pencil me-2" />Modifier le numéro du remplaçant
+                        </div>
+                        <form onSubmit={handleUpdateResp2}>
+                          <div className="pf-field" style={{ marginBottom: 10 }}>
+                            <label>
+                              <i className="bi bi-whatsapp me-1" style={{ color: "#25d366" }} />
+                              Nouveau numéro WhatsApp
+                            </label>
+                            <input
+                              className="pf-input" type="tel" required autoFocus
+                              placeholder="+212600000000"
+                              value={resp2Phone}
+                              onChange={(e) => setResp2Phone(e.target.value)}
+                            />
+                            <small style={{ color: "#94a3b8", fontSize: 11 }}>
+                              Format international : +212XXXXXXXXX
+                            </small>
+                          </div>
+                          <div style={{ display: "flex", gap: 8 }}>
+                            <button type="submit" className="pf-submit" style={{ flex: 1 }} disabled={savingResp2}>
+                              {savingResp2
+                                ? <><div className="pf-spinner" /> Enregistrement…</>
+                                : <><i className="bi bi-check2" /> Enregistrer</>}
+                            </button>
+                            <button type="button" onClick={() => { setEditingResp2(false); setResp2Phone(""); }} style={{
+                              border: "1.5px solid #e2e8f0", borderRadius: 12, padding: "10px 16px",
+                              background: "#fff", cursor: "pointer", color: "#64748b", fontSize: 13,
+                            }}>Annuler</button>
+                          </div>
+                        </form>
+                      </div>
+                    )}
+
+                    {/* Bouton ajouter responsable 2 */}
+                    {!resp2 && !showResp2Form && (
+                      <button onClick={() => { setShowResp2Form(true); setResp2Phone(""); }} style={{
+                        border: "1.5px dashed #cbd5e1", borderRadius: 12, padding: "12px 16px",
+                        width: "100%", background: "transparent", cursor: "pointer",
+                        fontSize: 13, color: "#64748b", display: "flex", alignItems: "center",
+                        justifyContent: "center", gap: 8,
+                      }}>
+                        <i className="bi bi-plus-circle" style={{ fontSize: 16 }} />
+                        Ajouter un responsable remplaçant
                       </button>
                     )}
 
-                    {showRespForm && (
-                      <form onSubmit={addResponsable} style={{ marginTop: 10 }}>
-                        <input
-                          type="email" required placeholder="email@exemple.com"
-                          value={newRespEmail} onChange={e => setNewRespEmail(e.target.value)}
-                          className="pf-input" style={{ marginBottom: 8 }}
-                        />
-                        <div style={{ display: "flex", gap: 8 }}>
-                          <button type="submit" className="pf-submit" style={{ flex: 1 }}>Ajouter</button>
-                          <button type="button" onClick={() => setShowRespForm(false)} style={{
-                            border: "1.5px solid #e2e8f0", borderRadius: 12, padding: "10px 16px",
-                            background: "#fff", cursor: "pointer", color: "#64748b",
-                          }}>Annuler</button>
+                    {/* Formulaire ajout responsable 2 */}
+                    {!resp2 && showResp2Form && (
+                      <div style={{
+                        padding: "14px 16px", borderRadius: 12,
+                        background: "#f8fafc", border: "1.5px solid #4361ee",
+                      }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, color: "#4361ee" }}>
+                          <i className="bi bi-person-plus me-2" />Ajouter un remplaçant
                         </div>
-                      </form>
+                        <p style={{ fontSize: 12, color: "#64748b", marginBottom: 12 }}>
+                          Si vous êtes occupé ou loin de votre patient, ce responsable recevra les alertes à votre place.
+                        </p>
+                        <form onSubmit={handleAddResp2}>
+                          <div className="pf-field" style={{ marginBottom: 10 }}>
+                            <label>
+                              <i className="bi bi-whatsapp me-1" style={{ color: "#25d366" }} />
+                              Numéro WhatsApp du remplaçant
+                            </label>
+                            <input
+                              className="pf-input" type="tel" required autoFocus
+                              placeholder="+212600000000"
+                              value={resp2Phone}
+                              onChange={(e) => setResp2Phone(e.target.value)}
+                            />
+                            <small style={{ color: "#94a3b8", fontSize: 11 }}>
+                              Format international : +212XXXXXXXXX
+                            </small>
+                          </div>
+                          <div style={{ display: "flex", gap: 8 }}>
+                            <button type="submit" className="pf-submit" style={{ flex: 1 }} disabled={savingResp2}>
+                              {savingResp2
+                                ? <><div className="pf-spinner" /> Ajout…</>
+                                : <><i className="bi bi-check2" /> Ajouter</>}
+                            </button>
+                            <button type="button" onClick={() => { setShowResp2Form(false); setResp2Phone(""); }} style={{
+                              border: "1.5px solid #e2e8f0", borderRadius: 12, padding: "10px 16px",
+                              background: "#fff", cursor: "pointer", color: "#64748b", fontSize: 13,
+                            }}>Annuler</button>
+                          </div>
+                        </form>
+                      </div>
                     )}
                   </div>
                 )}
               </div>
             ) : (
+              /* ── FORMULAIRE EDITION ── */
               <form onSubmit={handleSave} style={{ flex: 1, display: "flex", flexDirection: "column" }}>
                 <div className="pf-grid" style={{ flex: 1 }}>
                   {[
-                    { name: "nom",      label: "Nom",               placeholder: "Dupont",            type: "text"            },
-                    { name: "prenom",   label: "Prénom",            placeholder: "Marie",             type: "text"            },
-                    { name: "email",    label: "Email",             placeholder: "marie@exemple.com", type: "email", full: true },
-                    { name: "age",      label: "Âge",               placeholder: "42",                type: "number"          },
-                    { name: "maladies", label: "Condition médicale", placeholder: "Diabète…",         type: "text"            },
+                    { name: "nom",      label: "Nom",               placeholder: "Dupont",           type: "text"   },
+                    { name: "prenom",   label: "Prénom",            placeholder: "Marie",            type: "text"   },
+                    { name: "email",    label: "Email",             placeholder: "marie@exemple.com",type: "email", full: true },
+                    { name: "age",      label: "Âge",               placeholder: "42",               type: "number" },
+                    { name: "maladies", label: "Condition médicale",placeholder: "Diabète…",         type: "text"   },
                   ].map(({ name, label, placeholder, type, full }) => (
                     <div key={name} className={`pf-field ${full ? "pf-full" : ""}`}>
                       <label>{label}</label>
@@ -416,13 +553,14 @@ export default function Profile() {
                     </div>
                   ))}
 
+                  {/* ── Type de notification ── */}
                   <div className="pf-full">
                     <div className="pf-info-label" style={{ marginBottom: 10 }}>Type de notification</div>
                     <div className="pf-notif-group">
                       {[
                         { val: "patient",     icon: "bi-person-fill", label: "Patient",     sub: "Notifications pour moi" },
-                        { val: "responsable", icon: "bi-people-fill", label: "Responsable", sub: "Pour un proche" },
-                      ].map(opt => (
+                        { val: "responsable", icon: "bi-people-fill", label: "Responsable", sub: "Je surveille un proche" },
+                      ].map((opt) => (
                         <label key={opt.val} className={`pf-radio-card ${user.notification === opt.val ? "active" : ""}`}>
                           <input type="radio" value={opt.val} checked={user.notification === opt.val}
                             onChange={handleRadioChange} className="d-none" />
@@ -452,21 +590,27 @@ export default function Profile() {
         </div>
       </div>
 
-      {/* ── MODAL EMAIL ── */}
+      {/* ── MODAL TELEPHONE WHATSAPP ── */}
       {showModal && (
         <div className="pf-modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="pf-modal" onClick={e => e.stopPropagation()}>
+          <div className="pf-modal" onClick={(e) => e.stopPropagation()}>
             <h4 className="pf-modal-title">{modalLabel.title}</h4>
             <p className="pf-modal-sub">{modalLabel.sub}</p>
-            <form onSubmit={e => { e.preventDefault(); setShowModal(false); }}>
+            <form onSubmit={(e) => { e.preventDefault(); setShowModal(false); }}>
               <div className="pf-field" style={{ marginBottom: 16 }}>
-                <label>Email</label>
+                <label>
+                  <i className="bi bi-whatsapp me-1" style={{ color: "#25d366" }} />
+                  {user.notification === "responsable" ? "Votre numéro WhatsApp" : "Numéro WhatsApp"}
+                </label>
                 <input
-                  className="pf-input" type="email" required autoFocus
-                  placeholder={modalLabel.placeholder}
-                  value={contactEmail}
-                  onChange={e => setContactEmail(e.target.value)}
+                  className="pf-input" type="tel" required autoFocus
+                  placeholder="+212600000000"
+                  value={telephone}
+                  onChange={(e) => setTelephone(e.target.value)}
                 />
+                <small style={{ color: "#94a3b8", fontSize: 11 }}>
+                  Format international : +212XXXXXXXXX
+                </small>
               </div>
               <button type="submit" className="pf-submit">
                 <i className="bi bi-check2" /> Valider
